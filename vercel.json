@@ -1,12 +1,7 @@
 {
-  "name": "SMMPro Video Downloader API",
   "version": 2,
-  "public": false,
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "buildEnvironmentVariables": {
-    "NODE_ENV": "production"
-  },
   "headers": [
     {
       "source": "/(.*)",
