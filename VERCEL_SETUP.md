@@ -13,7 +13,7 @@ npm i -g vercel
 vercel
 ```
 
-Follow the prompts. That's it!
+Follow the prompts (select **"Other"** for Framework preset). That's it!
 
 ### Option 2: Vercel Dashboard (Recommended)
 
@@ -21,15 +21,16 @@ Follow the prompts. That's it!
 2. Go to [vercel.com](https://vercel.com)
 3. Click **New Project**
 4. Select your GitHub repo
-5. Click **Deploy**
+5. **Framework Preset:** Select **"Other"** (plain Node.js)
+6. Click **Deploy**
 
-Vercel auto-detects the Node.js setup and deploys.
+Vercel auto-detects Node.js setup and deploys.
 
 ---
 
 ## Environment Variables (Optional)
 
-After deployment, add these in **Vercel Dashboard → Project Settings → Environment Variables**:
+After deployment, customize settings in **Vercel Dashboard → Project Settings → Environment Variables**:
 
 | Variable | Default | What It Does |
 |----------|---------|--------------|
@@ -41,6 +42,13 @@ After deployment, add these in **Vercel Dashboard → Project Settings → Envir
 | `MAX_VIDEO_DURATION` | `7200` | Max video length in seconds (2 hours) |
 | `MAX_FILE_SIZE_MB` | `500` | Max downloadable file size |
 | `MAX_FORMATS` | `10` | Max quality options per video |
+
+**To add variables:**
+1. Vercel Dashboard → Project Settings → Environment Variables
+2. Click **Add Environment Variable**
+3. Enter name & value
+4. Click **Save**
+5. Redeploy (or wait for next push)
 
 ---
 
