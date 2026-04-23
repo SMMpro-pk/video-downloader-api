@@ -1,0 +1,78 @@
+{
+  "name": "SMMPro Video Downloader API",
+  "version": 2,
+  "public": false,
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "env": {
+    "NODE_ENV": {
+      "description": "Node environment",
+      "default": "production"
+    },
+    "AUTO_GENERATE_API_KEY": {
+      "description": "Auto-generate API key on deployment (true/false)",
+      "default": "true"
+    },
+    "PORT": {
+      "description": "Server port (Vercel sets this automatically)",
+      "default": "3000"
+    },
+    "RATE_LIMIT_MAX": {
+      "description": "Max requests per 15-minute window per IP",
+      "default": "100"
+    },
+    "CACHE_TTL_MINUTES": {
+      "description": "Minutes to keep cached results",
+      "default": "60"
+    },
+    "MAX_CONCURRENT": {
+      "description": "Max parallel video extractions",
+      "default": "3"
+    },
+    "MAX_VIDEO_DURATION": {
+      "description": "Max video duration in seconds (7200 = 2 hours)",
+      "default": "7200"
+    },
+    "MAX_FILE_SIZE_MB": {
+      "description": "Max file size in MB",
+      "default": "500"
+    },
+    "MAX_FORMATS": {
+      "description": "Max download formats per video",
+      "default": "10"
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/index.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.js"
+    }
+  ]
+}
