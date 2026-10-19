@@ -6,13 +6,25 @@ All-in-one backend API to download videos from **50+ social media platforms** us
 
 Powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp) and Node.js.
 
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?name=video-downloader-api&type=git&repository=SMMpro-pk%2Fvideo-downloader-api&branch=main&builder=dockerfile&instance_type=free&regions=fra&instances_min=0&autoscaling_sleep_idle_delay=3900)
+
 ---
 
-## ⚡ Deploy to Vercel (30 seconds)
+## ⚡ 1-Click Cloud Deployment
+
+### Koyeb (Free Tier & Docker Builder)
+
+Click the button below to deploy immediately to Koyeb with zero configuration:
+
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?name=video-downloader-api&type=git&repository=SMMpro-pk%2Fvideo-downloader-api&branch=main&builder=dockerfile&instance_type=free&regions=fra&instances_min=0&autoscaling_sleep_idle_delay=3900)
+
+---
+
+### Vercel (Serverless)
 
 ```bash
 # Clone and deploy
-git clone https://github.com/YOUR_REPO/video-downloader-api.git
+git clone https://github.com/SMMpro-pk/video-downloader-api.git
 cd video-downloader-api
 vercel
 ```
@@ -24,7 +36,7 @@ After deployment, get your API key:
 curl https://your-app.vercel.app/api/deploy-info
 ```
 
-➜ **[Full Vercel Guide →](./VERCEL_SETUP.md)**
+➜ **[Full Deployment Guide & More Platforms →](./DEPLOYMENT.md)**
 
 ---
 

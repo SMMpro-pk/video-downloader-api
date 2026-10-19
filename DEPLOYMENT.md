@@ -108,12 +108,18 @@ fly deploy
 
 ---
 
-## 6. Koyeb
+## 6. Koyeb (1-Click Deploy)
 
+Deploy directly using the pre-configured Docker builder on Koyeb:
+
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?name=video-downloader-api&type=git&repository=SMMpro-pk%2Fvideo-downloader-api&branch=main&builder=dockerfile&instance_type=free&regions=fra&instances_min=0&autoscaling_sleep_idle_delay=3900)
+
+Or manually:
 1. Go to [app.koyeb.com](https://app.koyeb.com) → **Create App**.
 2. Choose **GitHub** as the deployment method.
-3. Select your repository and `main` branch.
-4. Click **Deploy**. Koyeb auto-detects Node.js and starts the app.
+3. Select your repository `SMMpro-pk/video-downloader-api` and `main` branch.
+4. Select **Dockerfile** as builder.
+5. Click **Deploy**.
 
 ---
 
