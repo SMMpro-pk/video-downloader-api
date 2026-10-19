@@ -16,15 +16,22 @@ function run(fn) {
   return new Promise((resolve, reject) => {
     const execute = () => {
       activeCount++;
+      const nextJob = () => {
+        activeCount--;
+        if (queue.length > 0) {
+          const next = queue.shift();
+          next();
+        }
+      };
+
       fn()
-        .then(resolve)
-        .catch(reject)
-        .finally(() => {
-          activeCount--;
-          if (queue.length > 0) {
-            const next = queue.shift();
-            next();
-          }
+        .then((val) => {
+          nextJob();
+          resolve(val);
+        })
+        .catch((err) => {
+          nextJob();
+          reject(err);
         });
     };
 

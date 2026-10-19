@@ -7,14 +7,23 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
-// youtube-dl-exec stores its binary here
-const binDir = path.dirname(require.resolve('youtube-dl-exec'));
+let ytdlpBin;
+try {
+  const ytdlpExec = require('youtube-dl-exec');
+  ytdlpBin = ytdlpExec.constants?.YOUTUBE_DL_PATH;
+} catch {
+  // fallback if module not found yet
+}
+if (!ytdlpBin) {
+  const binDir = path.dirname(require.resolve('youtube-dl-exec'));
+  const exeName = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+  ytdlpBin = path.join(binDir, '..', 'bin', exeName);
+}
 
 console.log('🔄  Checking for yt-dlp updates...');
 
 try {
-  const ytdlp = path.join(binDir, '..', 'bin', 'yt-dlp');
-  const output = execSync(`"${ytdlp}" -U`, {
+  const output = execSync(`"${ytdlpBin}" -U`, {
     encoding: 'utf8',
     timeout: 60_000,
     stdio: ['pipe', 'pipe', 'pipe'],

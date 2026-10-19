@@ -507,6 +507,30 @@ const PLATFORMS = [
       'metacafe.com', 'www.metacafe.com',
     ],
   },
+  {
+    name: 'bluesky',
+    description: 'Bluesky Social Videos',
+    domains: [
+      'bsky.app', 'www.bsky.app',
+      'bsky.social',
+    ],
+  },
+  {
+    name: 'xiaohongshu',
+    description: 'Xiaohongshu (RED) Videos & Notes',
+    domains: [
+      'xiaohongshu.com', 'www.xiaohongshu.com',
+      'xhslink.com',
+    ],
+  },
+  {
+    name: 'kuaishou',
+    description: 'Kuaishou Short Videos',
+    domains: [
+      'kuaishou.com', 'www.kuaishou.com',
+      'kuaishouzt.com', 'gifshow.com',
+    ],
+  },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -650,6 +674,7 @@ function isShortUrl(url) {
       'instagr.am', 'l.likee.video', 'fb.gg', 'goo.gl',
       'v.triller.co', 'on.soundcloud.com', 'l.facebook.com',
       'lm.facebook.com', 't.snapchat.com', 'share.myjosh.in',
+      'xhslink.com',
     ];
     return PLATFORM_SHORT.includes(hostname);
   } catch {

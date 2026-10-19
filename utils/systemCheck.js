@@ -30,15 +30,27 @@ function runAll() {
   // 3. Python
   results.push(check('Python', () => {
     try {
-      return execSync('python3 --version', { encoding: 'utf8', timeout: 10_000 }).trim();
+      return execSync('python3 --version', { encoding: 'utf8', timeout: 5_000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
     } catch {
-      return execSync('python --version', { encoding: 'utf8', timeout: 10_000 }).trim();
+      try {
+        return execSync('python --version', { encoding: 'utf8', timeout: 5_000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      } catch {
+        // Standalone yt-dlp binary includes its own embedded Python environment
+        try {
+          const ytdlp = require('youtube-dl-exec');
+          const bin = ytdlp.constants?.YOUTUBE_DL_PATH;
+          if (bin && fs.existsSync(bin)) {
+            return 'Embedded (bundled with yt-dlp)';
+          }
+        } catch {}
+        throw new Error('Python not found in system PATH');
+      }
     }
   }));
 
   // 4. ffmpeg
   results.push(check('ffmpeg', () => {
-    const out = execSync('ffmpeg -version', { encoding: 'utf8', timeout: 10_000 });
+    const out = execSync('ffmpeg -version', { encoding: 'utf8', timeout: 10_000, stdio: ['pipe', 'pipe', 'pipe'] });
     const match = out.match(/ffmpeg version (\S+)/);
     return match ? match[1] : 'installed';
   }));
@@ -47,12 +59,13 @@ function runAll() {
   results.push(check('yt-dlp', () => {
     try {
       const ytdlp = require('youtube-dl-exec');
-      const binPath = ytdlp.getBinaryPath ? ytdlp.getBinaryPath() : 'bundled';
-      const out = execSync(`"${binPath}" --version`, { encoding: 'utf8', timeout: 15_000 }).trim();
+      const binPath = ytdlp.constants?.YOUTUBE_DL_PATH || (ytdlp.getBinaryPath ? ytdlp.getBinaryPath() : 'yt-dlp');
+      const { execFileSync } = require('child_process');
+      const out = execFileSync(binPath, ['--version'], { encoding: 'utf8', timeout: 15_000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
       return out || 'installed';
     } catch {
       // Fallback: try global yt-dlp
-      return execSync('yt-dlp --version', { encoding: 'utf8', timeout: 10_000 }).trim();
+      return execSync('yt-dlp --version', { encoding: 'utf8', timeout: 10_000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
     }
   }));
 

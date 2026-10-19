@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: video-downloader-api
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTO_GENERATE_API_KEY
+        value: true
+      - key: RATE_LIMIT_MAX
+        value: 100
+      - key: MAX_CONCURRENT
+        value: 5
+      - key: CACHE_TTL_MINUTES
+        value: 60

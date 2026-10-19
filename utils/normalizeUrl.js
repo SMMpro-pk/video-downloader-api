@@ -42,31 +42,32 @@ const TRACKING_PARAMS = [
   '_ga', '_gl', '_hsenc', '_hsmi',
 ];
 
+const { validateSafeUrl } = require('./security');
+
 /**
  * Follow HTTP redirects to resolve a short/redirect URL to its final destination.
- * Uses only built-in Node.js http/https modules (zero extra deps).
+ * Uses only built-in Node.js http/https modules (zero extra deps) with SSRF protection.
  *
  * @param {string} url - The URL to resolve.
  * @param {number} [maxHops] - Max redirects to follow.
  * @returns {Promise<string>} The final resolved URL.
  */
 function followRedirects(url, maxHops = MAX_REDIRECTS) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     let hops = 0;
     let currentUrl = url;
 
-    function doRequest(reqUrl) {
+    async function doRequest(reqUrl) {
       if (hops >= maxHops) {
         return resolve(currentUrl); // give up, return whatever we have
       }
 
-      let parsedUrl;
-      try {
-        parsedUrl = new URL(reqUrl);
-      } catch {
-        return resolve(currentUrl);
+      const safeCheck = await validateSafeUrl(reqUrl);
+      if (!safeCheck.ok) {
+        return resolve(currentUrl); // abort following unsafe redirect
       }
 
+      const parsedUrl = safeCheck.parsedUrl;
       const client = parsedUrl.protocol === 'https:' ? https : http;
 
       const req = client.request(
@@ -79,7 +80,7 @@ function followRedirects(url, maxHops = MAX_REDIRECTS) {
             Accept: 'text/html,application/xhtml+xml,*/*',
           },
         },
-        (res) => {
+        async (res) => {
           // Follow 3xx redirects
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             hops++;
@@ -90,6 +91,12 @@ function followRedirects(url, maxHops = MAX_REDIRECTS) {
               next = `${parsedUrl.protocol}//${parsedUrl.host}${next}`;
             } else if (!next.startsWith('http')) {
               next = new URL(next, reqUrl).href;
+            }
+
+            const nextCheck = await validateSafeUrl(next);
+            if (!nextCheck.ok) {
+              res.resume();
+              return resolve(currentUrl);
             }
 
             currentUrl = next;

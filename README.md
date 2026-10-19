@@ -319,6 +319,8 @@ All `/api/*` endpoints (except `/api/health` and `/api/version`) require an API 
 **Option 1 — Header (recommended):**
 ```bash
 curl -H "x-api-key: YOUR_SECRET_KEY" "http://localhost:3000/api/download?url=..."
+# OR standard Authorization Bearer header:
+curl -H "Authorization: Bearer YOUR_SECRET_KEY" "http://localhost:3000/api/download?url=..."
 ```
 
 **Option 2 — Query parameter:**
@@ -457,9 +459,53 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/download?url=https://vm
 }
 ```
 
+> **Tip:** You can also call both `/api/download` and `/api/info` via `POST` with JSON body:
+> ```bash
+> curl -X POST -H "Content-Type: application/json" -d '{"url":"https://youtu.be/dQw4w9WgXcQ"}' http://localhost:3000/api/download
+> ```
+
 ---
 
-### 3. `GET /api/check?url=<video_url>` — Check URL Platform
+### 3. `POST /api/batch` — Batch Video Extraction
+
+Extract multiple videos simultaneously in a single call (up to 10 URLs). Requests run through the concurrency queue to prevent server overloading.
+
+```bash
+curl -X POST http://localhost:3000/api/batch \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_KEY" \
+  -d '{"urls": ["https://youtu.be/dQw4w9WgXcQ", "https://vm.tiktok.com/ZM8abc/"]}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "total": 2,
+  "successful": 2,
+  "failed": 0,
+  "processingTime": "3210ms",
+  "results": [
+    { "url": "https://youtu.be/dQw4w9WgXcQ", "success": true, "cached": true, "data": { "title": "..." } },
+    { "url": "https://vm.tiktok.com/ZM8abc/", "success": true, "cached": false, "data": { "title": "..." } }
+  ]
+}
+```
+
+---
+
+### 4. `GET /api/stream?url=<media_url>&filename=video.mp4` — Direct Streaming Proxy
+
+Solves CORS restrictions, IP expiration, and hotlink referer checks on TikTok, Instagram, Twitter/X, and YouTube CDN streams. Proxies media directly to the client browser with `Range` header support (seeking & resume) and forces an attachment download.
+
+```bash
+# Direct in-browser download
+<a href="/api/stream?url=https%3A%2F%2Fcdn.example.com%2Fvideo.mp4&filename=my_video.mp4">Download MP4</a>
+```
+
+---
+
+### 5. `GET /api/check?url=<video_url>` — Check URL Platform
 
 Quickly check which platform a URL belongs to. Resolves short URLs before detection.
 
@@ -481,12 +527,12 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 4. `GET /api/platforms` — List Supported Platforms
+### 6. `GET /api/platforms` — List Supported Platforms
 
 ```json
 {
   "success": true,
-  "count": 53,
+  "count": 56,
   "platforms": [
     {
       "name": "youtube",
@@ -500,7 +546,7 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 5. `GET /api/health` — Health Check (Public, No Key Required)
+### 7. `GET /api/health` — Health Check (Public, No Key Required)
 
 ```json
 {
@@ -515,7 +561,7 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 6. `GET /api/stats` — Daily Usage Statistics
+### 8. `GET /api/stats` — Daily Usage Statistics
 
 ```json
 {
@@ -534,13 +580,13 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 7. `GET /api/version` — Version & Runtime Info (Public, No Key Required)
+### 9. `GET /api/version` — Version & Runtime Info (Public, No Key Required)
 
 ```json
 {
   "success": true,
   "name": "smmpro-video-downloader-api",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "node": "v20.12.0",
   "platform": "linux",
   "uptime": "3600s"
@@ -549,7 +595,7 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 8. `GET /api/cache` — Cache Statistics
+### 10. `GET /api/cache` — Cache Statistics
 
 ```json
 {
@@ -564,7 +610,7 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 9. `DELETE /api/cache` — Clear Cache
+### 11. `DELETE /api/cache` — Clear Cache
 
 ```json
 {

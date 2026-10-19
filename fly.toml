@@ -1,0 +1,25 @@
+app = "video-downloader-api"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "get"
+    path = "/api/health"
+
+[env]
+  NODE_ENV = "production"
+  AUTO_GENERATE_API_KEY = "true"
+  RATE_LIMIT_MAX = "100"
+  MAX_CONCURRENT = "5"

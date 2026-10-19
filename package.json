@@ -1,11 +1,12 @@
 {
   "name": "smmpro-video-downloader-api",
-  "version": "3.1.0",
-  "description": "All-in-one video downloader API — 50+ platforms, smart caching, queue protection, fallback extraction",
+  "version": "3.2.0",
+  "description": "All-in-one video downloader API — 50+ platforms, smart caching, queue protection, fallback extraction, streaming proxy, and batch processing",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
+    "test": "node --test test/*.test.js",
     "build": "node scripts/update-ytdlp.js || true",
     "postinstall": "node scripts/update-ytdlp.js || true",
     "update-ytdlp": "node scripts/update-ytdlp.js"
@@ -29,6 +30,6 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^7.3.1",
-    "youtube-dl-exec": "^3.0.0"
+    "youtube-dl-exec": "^3.1.17"
   }
 }

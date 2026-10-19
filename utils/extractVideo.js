@@ -23,22 +23,35 @@ function log(level, message, meta = {}) {
   else if (level === 'warn') console.warn(`[${level}] ${message}`);
 }
 
+// ─── Environment & yt-dlp Settings ───
+const YTDLP_PROXY = process.env.YTDLP_PROXY || process.env.PROXY_URL || process.env.HTTP_PROXY || null;
+const YTDLP_COOKIES = process.env.YTDLP_COOKIES_FILE || process.env.COOKIES_PATH || null;
+const YTDLP_USER_AGENT = process.env.YTDLP_USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 // ─── Detailed error codes ───
 const ERROR_MAP = {
-  'private'          : { code: 'VIDEO_PRIVATE',             message: 'This video is private.' },
-  'removed'          : { code: 'VIDEO_REMOVED',             message: 'This video has been removed.' },
-  'unavailable'      : { code: 'VIDEO_REMOVED',             message: 'This video is unavailable.' },
-  'geo'              : { code: 'GEO_RESTRICTED',            message: 'This video is geo-restricted in your region.' },
-  'country'          : { code: 'GEO_RESTRICTED',            message: 'This video is not available in your country.' },
-  'login'            : { code: 'LOGIN_REQUIRED',            message: 'Login is required to access this video.' },
-  'sign in'          : { code: 'LOGIN_REQUIRED',            message: 'Login is required to access this video.' },
-  'authentication'   : { code: 'LOGIN_REQUIRED',            message: 'Login is required to access this video.' },
-  'rate limit'       : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
-  'too many requests': { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
-  '429'              : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
-  'not supported'    : { code: 'PLATFORM_UNSUPPORTED',      message: 'This platform or URL type is not supported.' },
-  'unsupported url'  : { code: 'PLATFORM_UNSUPPORTED',      message: 'This platform or URL type is not supported.' },
-  'no video'         : { code: 'EXTRACTION_FAILED',         message: 'No video found at this URL.' },
+  'private'                 : { code: 'VIDEO_PRIVATE',             message: 'This video is private.' },
+  'removed'                 : { code: 'VIDEO_REMOVED',             message: 'This video has been removed.' },
+  'unavailable'             : { code: 'VIDEO_REMOVED',             message: 'This video is unavailable.' },
+  'geo'                     : { code: 'GEO_RESTRICTED',            message: 'This video is geo-restricted in your region.' },
+  'country'                 : { code: 'GEO_RESTRICTED',            message: 'This video is not available in your country.' },
+  'login'                   : { code: 'LOGIN_REQUIRED',            message: 'Login is required to access this video.' },
+  'sign in'                 : { code: 'LOGIN_REQUIRED',            message: 'Login is required to access this video.' },
+  'authentication'          : { code: 'LOGIN_REQUIRED',            message: 'Login is required to access this video.' },
+  'bot'                     : { code: 'BOT_VERIFICATION_REQUIRED', message: 'Platform requested bot verification / captcha.' },
+  'confirm you’re not a bot': { code: 'BOT_VERIFICATION_REQUIRED', message: 'Sign in or bot verification is required.' },
+  'confirm you are not a bot':{ code: 'BOT_VERIFICATION_REQUIRED', message: 'Sign in or bot verification is required.' },
+  'members-only'            : { code: 'MEMBERS_ONLY',              message: 'This video is reserved for channel members only.' },
+  'copyright'               : { code: 'COPYRIGHT_TAKEDOWN',        message: 'This video has been taken down due to a copyright claim.' },
+  'age'                     : { code: 'AGE_RESTRICTED',            message: 'This video is age-restricted and requires account verification.' },
+  'premieres'               : { code: 'LIVE_PREMIERE_NOT_STARTED', message: 'This is a live premiere that has not started yet.' },
+  'rate limit'              : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
+  'too many requests'       : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
+  '429'                     : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
+  'blocked'                 : { code: 'IP_BLOCKED',                message: 'Your IP or datacenter is blocked by the platform.' },
+  'not supported'           : { code: 'PLATFORM_UNSUPPORTED',      message: 'This platform or URL type is not supported.' },
+  'unsupported url'         : { code: 'PLATFORM_UNSUPPORTED',      message: 'This platform or URL type is not supported.' },
+  'no video'                : { code: 'EXTRACTION_FAILED',         message: 'No video found at this URL.' },
 };
 
 function classifyError(stderr) {
@@ -67,6 +80,7 @@ const PLATFORM_OPTIONS = {
   bilibili:    { addHeader: ['referer:https://www.bilibili.com'] },
   douyin:      { addHeader: ['referer:https://www.douyin.com'] },
   threads:     { addHeader: ['referer:https://www.threads.net'] },
+  bluesky:     { addHeader: ['referer:https://bsky.app'] },
 };
 
 function isValidUrl(str) {
@@ -76,6 +90,14 @@ function isValidUrl(str) {
   } catch {
     return false;
   }
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return null;
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 // ─── Fallback extraction: native → retry → generic → error ───
@@ -148,7 +170,16 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     preferFreeFormats: true,
     youtubeSkipDashManifest: false,
     noPlaylist: true,
+    userAgent: YTDLP_USER_AGENT,
   };
+
+  if (YTDLP_PROXY) {
+    baseOptions.proxy = YTDLP_PROXY;
+  }
+
+  if (YTDLP_COOKIES && fs.existsSync(YTDLP_COOKIES)) {
+    baseOptions.cookies = YTDLP_COOKIES;
+  }
 
   const platformOverrides = PLATFORM_OPTIONS[platformName] || {};
   const options = { ...baseOptions, ...platformOverrides };
@@ -174,6 +205,32 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     throw err;
   }
 
+  // ─ Subtitles / Captions Extraction ─
+  const subtitles = [];
+  const rawSubs = { ...(data.subtitles || {}), ...(data.automatic_captions || {}) };
+  for (const [lang, subList] of Object.entries(rawSubs)) {
+    if (Array.isArray(subList) && subList.length > 0) {
+      const bestSub = subList.find((s) => s.ext === 'vtt') || subList[0];
+      if (bestSub && bestSub.url) {
+        subtitles.push({
+          language: lang,
+          name: bestSub.name || lang,
+          ext: bestSub.ext || 'vtt',
+          url: bestSub.url,
+        });
+      }
+    }
+  }
+
+  // ─ Chapters Extraction ─
+  const chapters = Array.isArray(data.chapters)
+    ? data.chapters.map((ch) => ({
+        title: ch.title || 'Chapter',
+        startTime: ch.start_time || 0,
+        endTime: ch.end_time || 0,
+      }))
+    : [];
+
   // ─ Frontend-friendly flags ─
   const isLiveStream = !!(data.is_live);
   const isShortVideo = !!(duration && duration <= 60);
@@ -198,31 +255,54 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     isShortVideo,
     isAudioOnly,
     isLiveStream,
+    subtitlesCount: subtitles.length,
+    chaptersCount: chapters.length,
   };
 
-  // ── Info-only mode — return quickly without parsing formats ──
+  // ── Info-only mode — return quickly without parsing full download formats ──
   if (infoOnly) {
     log('info', 'Info-only extraction complete', { platform: platformName, title: baseMeta.title });
-    return baseMeta;
+    return {
+      ...baseMeta,
+      subtitles: subtitles.slice(0, 10),
+      chapters,
+    };
   }
 
   // ─ Parse formats ─
   const formats = data.formats || [];
 
+  function getQualityScore(qualityStr, item) {
+    const num = parseInt(qualityStr, 10);
+    if (!isNaN(num) && num > 0) return num * 1000;
+    if (item.filesize) return Math.round(item.filesize / 1024);
+    return 1;
+  }
+
   // Video downloads — dedupe by quality+format, best first, then limit
   let videoDownloads = formats
     .filter((f) => f.url && f.vcodec && f.vcodec !== 'none')
-    .map((f) => ({
-      quality: f.height ? `${f.height}p` : f.format_note || 'Standard',
-      format: f.ext || 'mp4',
-      filesize: f.filesize || f.filesize_approx || null,
-      hasAudio: !!(f.acodec && f.acodec !== 'none'),
-      url: f.url,
-    }))
+    .map((f) => {
+      const hasAudio = !!(f.acodec && f.acodec !== 'none');
+      const filesize = f.filesize || f.filesize_approx || null;
+      return {
+        quality: f.height ? `${f.height}p` : f.format_note || 'Standard',
+        format: f.ext || 'mp4',
+        filesize,
+        filesizeFormatted: formatBytes(filesize),
+        hasAudio,
+        isMuxed: hasAudio,
+        width: f.width || null,
+        height: f.height || null,
+        fps: f.fps || null,
+        formatId: f.format_id || null,
+        url: f.url,
+      };
+    })
     .filter((item, idx, self) =>
-      idx === self.findIndex((t) => t.quality === item.quality && t.format === item.format)
+      idx === self.findIndex((t) => t.quality === item.quality && t.format === item.format && t.hasAudio === item.hasAudio)
     )
-    .sort((a, b) => parseInt(b.quality, 10) - parseInt(a.quality, 10));
+    .sort((a, b) => getQualityScore(b.quality, b) - getQualityScore(a.quality, a));
 
   // Apply size limit filter
   if (MAX_FILE_SIZE) {
@@ -237,16 +317,22 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
   // Audio-only downloads
   let audioDownloads = formats
     .filter((f) => f.url && f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'))
-    .map((f) => ({
-      quality: f.abr ? `${Math.round(f.abr)}kbps` : 'Standard',
-      format: f.ext || 'm4a',
-      filesize: f.filesize || f.filesize_approx || null,
-      url: f.url,
-    }))
+    .map((f) => {
+      const filesize = f.filesize || f.filesize_approx || null;
+      return {
+        quality: f.abr ? `${Math.round(f.abr)}kbps` : 'Standard',
+        format: f.ext || 'm4a',
+        abr: f.abr ? Math.round(f.abr) : null,
+        filesize,
+        filesizeFormatted: formatBytes(filesize),
+        formatId: f.format_id || null,
+        url: f.url,
+      };
+    })
     .filter((item, idx, self) =>
       idx === self.findIndex((t) => t.quality === item.quality && t.format === item.format)
     )
-    .sort((a, b) => parseInt(b.quality, 10) - parseInt(a.quality, 10))
+    .sort((a, b) => (b.abr || 0) - (a.abr || 0))
     .slice(0, MAX_FORMATS);
 
   // Fallback: top-level URL when no formats parsed
@@ -255,7 +341,13 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
       quality: data.height ? `${data.height}p` : 'Standard',
       format: data.ext || 'mp4',
       filesize: data.filesize || null,
+      filesizeFormatted: formatBytes(data.filesize),
       hasAudio: true,
+      isMuxed: true,
+      width: data.width || null,
+      height: data.height || null,
+      fps: data.fps || null,
+      formatId: data.format_id || 'direct',
       url: data.url,
     });
   }
@@ -269,6 +361,8 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     qualities,
     downloads: videoDownloads,
     audioDownloads,
+    subtitles: subtitles.slice(0, 15),
+    chapters,
   };
 
   log('info', 'Extraction complete', {
