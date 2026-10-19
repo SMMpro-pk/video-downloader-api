@@ -42,7 +42,7 @@ try {
     });
     console.log('✅  youtube-dl-exec reinstalled with latest yt-dlp binary.');
   } catch (err2) {
-    console.error('❌  Failed to update yt-dlp:', err2.message);
-    process.exit(1);
+    console.warn('⚠️  Could not update yt-dlp binary during build (using existing binary):', err2.message);
+    process.exit(0);
   }
 }
