@@ -19,17 +19,26 @@ function isPrivateIp(ip) {
     if (parts[0] === 0) return true;
     // 10.0.0.0/8 (private)
     if (parts[0] === 10) return true;
+    // 100.64.0.0/10 (carrier-grade NAT)
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
     // 127.0.0.0/8 (loopback)
     if (parts[0] === 127) return true;
     // 169.254.0.0/16 (link-local, cloud metadata service like AWS 169.254.169.254)
     if (parts[0] === 169 && parts[1] === 254) return true;
     // 172.16.0.0/12 (private)
     if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    // 192.0.0.0/24, 192.0.2.0/24
+    if (parts[0] === 192 && parts[1] === 0 && (parts[2] === 0 || parts[2] === 2)) return true;
     // 192.168.0.0/16 (private)
     if (parts[0] === 192 && parts[1] === 168) return true;
+    // 198.18.0.0/15 (benchmark)
+    if (parts[0] === 198 && (parts[1] === 18 || parts[1] === 19)) return true;
+    // 198.51.100.0/24, 203.0.113.0/24 (documentation)
+    if (parts[0] === 198 && parts[1] === 51 && parts[2] === 100) return true;
+    if (parts[0] === 203 && parts[1] === 0 && parts[2] === 113) return true;
     // 224.0.0.0/4 (multicast)
     if (parts[0] >= 224 && parts[0] <= 239) return true;
-    // 240.0.0.0/4 (reserved)
+    // 240.0.0.0/4 (reserved) & 255.255.255.255
     if (parts[0] >= 240) return true;
 
     return false;
@@ -60,6 +69,7 @@ function isPrivateIp(ip) {
 
 /**
  * Validates a target URL against SSRF and illegal protocols.
+ * Checks both literal hostnames and resolved DNS IP addresses.
  * Returns { ok: boolean, error?: string, parsedUrl?: URL }
  *
  * @param {string} inputUrl
@@ -98,6 +108,29 @@ async function validateSafeUrl(inputUrl) {
     if (isPrivateIp(hostname)) {
       return { ok: false, error: 'Access to private or reserved IP addresses is forbidden.' };
     }
+    return { ok: true, parsedUrl: parsed };
+  }
+
+  // DNS resolution check to prevent DNS rebinding and internal IP aliases (e.g. nip.io, localtest.me)
+  try {
+    const addresses = await Promise.race([
+      dns.promises.lookup(hostname, { all: true }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('DNS_TIMEOUT')), 3000)),
+    ]);
+
+    if (Array.isArray(addresses)) {
+      for (const entry of addresses) {
+        if (isPrivateIp(entry.address)) {
+          return { ok: false, error: 'Access to private or reserved IP addresses is forbidden.' };
+        }
+      }
+    }
+  } catch (err) {
+    // If DNS times out or resolution fails with private error, guard appropriately
+    if (err && err.message === 'DNS_TIMEOUT') {
+      return { ok: false, error: 'DNS resolution timed out for safety check.' };
+    }
+    // ENOTFOUND means domain does not exist; let upstream handle connection failure
   }
 
   return { ok: true, parsedUrl: parsed };

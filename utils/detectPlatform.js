@@ -618,36 +618,39 @@ function getDomainMap() {
  * @returns {{ name: string, description: string } | null}
  */
 function detectPlatform(url) {
-  const lower = url.toLowerCase();
+  if (!url || typeof url !== 'string') return null;
+  const lower = url.toLowerCase().trim();
 
-  // Try exact hostname match first (fast path)
+  let hostname = '';
   try {
-    const hostname = new URL(lower).hostname.replace(/^www\./, '');
-    const map = getDomainMap();
-
-    // Direct match
-    if (map.has(hostname)) {
-      const p = map.get(hostname);
-      return { name: p.name, description: p.description };
-    }
-
-    // Subdomain match: "clips.twitch.tv" → check parent "twitch.tv"
-    const parts = hostname.split('.');
-    for (let i = 1; i < parts.length - 1; i++) {
-      const parent = parts.slice(i).join('.');
-      if (map.has(parent)) {
-        const p = map.get(parent);
-        return { name: p.name, description: p.description };
-      }
-    }
+    const parsed = new URL(lower.includes('://') ? lower : `https://${lower}`);
+    hostname = parsed.hostname.replace(/^www\./, '');
   } catch {
-    // Not a valid URL — fall through to substring scan
+    return null;
   }
 
-  // Fallback: substring match for edge cases (bandcamp subdomains, etc.)
+  const map = getDomainMap();
+
+  // Direct match
+  if (map.has(hostname)) {
+    const p = map.get(hostname);
+    return { name: p.name, description: p.description };
+  }
+
+  // Subdomain match: "clips.twitch.tv" → check parent "twitch.tv"
+  const parts = hostname.split('.');
+  for (let i = 1; i < parts.length - 1; i++) {
+    const parent = parts.slice(i).join('.');
+    if (map.has(parent)) {
+      const p = map.get(parent);
+      return { name: p.name, description: p.description };
+    }
+  }
+
+  // Suffix check against domain boundaries only (never query params or path)
   for (const platform of PLATFORMS) {
     for (const domain of platform.domains) {
-      if (lower.includes(domain)) {
+      if (hostname === domain || hostname.endsWith(`.${domain}`)) {
         return { name: platform.name, description: platform.description };
       }
     }

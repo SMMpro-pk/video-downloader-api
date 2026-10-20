@@ -50,10 +50,20 @@ describe('Security & SSRF Guard', () => {
     const r6 = await validateSafeUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
     assert.equal(r6.ok, true);
     assert.equal(r6.parsedUrl.hostname, 'www.youtube.com');
+
+    // DNS-resolved private / loopback domains
+    const r7 = await validateSafeUrl('http://127.0.0.1.nip.io/secret');
+    assert.equal(r7.ok, false);
   });
 });
 
 describe('Platform Detection', () => {
+  test('rejects platform spoofing via query params, hash or path', () => {
+    assert.equal(detectPlatform('https://attacker.com/watch?fake=youtube.com'), null);
+    assert.equal(detectPlatform('https://attacker.com/instagram.com/reel/123'), null);
+    assert.equal(detectPlatform('https://attacker.com/#tiktok.com'), null);
+  });
+
   test('detects major video platforms correctly', () => {
     assert.equal(detectPlatform('https://www.youtube.com/watch?v=dQw4w9WgXcQ')?.name, 'youtube');
     assert.equal(detectPlatform('https://youtu.be/dQw4w9WgXcQ')?.name, 'youtube');
@@ -269,6 +279,11 @@ describe('Instagram & Error Handling', () => {
     const stderr = 'ERROR: [Instagram] checkpoint_required: Please confirm your account';
     const classified = extractVideo.classifyError(stderr);
     assert.equal(classified.code, 'BOT_VERIFICATION_REQUIRED');
+  });
+
+  test('classifies timeout and challenge errors properly', () => {
+    assert.equal(extractVideo.classifyError('Request timed out').code, 'EXTRACTION_TIMEOUT');
+    assert.equal(extractVideo.classifyError('YouTube said: please provide po-token').code, 'BOT_VERIFICATION_REQUIRED');
   });
 
   test('resolveCookiesFile returns null when no cookies exist', () => {

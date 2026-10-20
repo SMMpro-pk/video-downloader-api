@@ -9,6 +9,7 @@ const MAX_VIDEO_DURATION = parseInt(process.env.MAX_VIDEO_DURATION, 10) || 7200;
 const MAX_FILE_SIZE_MB   = parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 500;
 const MAX_FILE_SIZE      = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_FORMATS        = parseInt(process.env.MAX_FORMATS, 10) || 10;
+const EXTRACTION_TIMEOUT = parseInt(process.env.EXTRACTION_TIMEOUT, 10) || 45000; // 45s default
 
 // ─── Logger ───
 const os = require('os');
@@ -78,6 +79,8 @@ const ERROR_MAP = {
   'bot'                     : { code: 'BOT_VERIFICATION_REQUIRED', message: 'Platform requested bot verification / captcha.' },
   'confirm you’re not a bot': { code: 'BOT_VERIFICATION_REQUIRED', message: 'Sign in or bot verification is required.' },
   'confirm you are not a bot':{ code: 'BOT_VERIFICATION_REQUIRED', message: 'Sign in or bot verification is required.' },
+  'po-token'                : { code: 'BOT_VERIFICATION_REQUIRED', message: 'Platform requires Proof of Origin token or session cookies.' },
+  'n-sig'                   : { code: 'EXTRACTION_FAILED',         message: 'Platform anti-bot signature extraction failed. yt-dlp update required.' },
   'members-only'            : { code: 'MEMBERS_ONLY',              message: 'This video is reserved for channel members only.' },
   'copyright'               : { code: 'COPYRIGHT_TAKEDOWN',        message: 'This video has been taken down due to a copyright claim.' },
   'age'                     : { code: 'AGE_RESTRICTED',            message: 'This video is age-restricted and requires account verification.' },
@@ -85,6 +88,8 @@ const ERROR_MAP = {
   'rate limit'              : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
   'too many requests'       : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
   '429'                     : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
+  'timed out'               : { code: 'EXTRACTION_TIMEOUT',        message: 'Extraction timed out. Upstream platform took too long to respond.' },
+  'timeout'                 : { code: 'EXTRACTION_TIMEOUT',        message: 'Extraction timed out. Upstream platform took too long to respond.' },
   'blocked'                 : { code: 'IP_BLOCKED',                message: 'Your IP or datacenter is blocked by the platform.' },
   'not supported'           : { code: 'PLATFORM_UNSUPPORTED',      message: 'This platform or URL type is not supported.' },
   'unsupported url'         : { code: 'PLATFORM_UNSUPPORTED',      message: 'This platform or URL type is not supported.' },
@@ -137,31 +142,52 @@ function formatBytes(bytes) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
+function runWithTimeout(promise, ms = EXTRACTION_TIMEOUT, message = 'Extraction timed out.') {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(message);
+      err.code = 'EXTRACTION_TIMEOUT';
+      err.stderr = 'timed out';
+      reject(err);
+    }, ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 // ─── Fallback extraction: native → retry → generic (only for 'other') → error ───
 async function runYtdlp(url, options, platformName) {
   // Attempt 1 — native extractor
   try {
-    return await youtubedl(url, options);
+    return await runWithTimeout(youtubedl(url, options));
   } catch (err1) {
+    if (err1.code === 'EXTRACTION_TIMEOUT') {
+      log('error', 'Attempt 1 timed out', { url });
+      throw err1;
+    }
     const err1Stderr = err1.stderr || err1.message || '';
     log('warn', 'Attempt 1 (native) failed, retrying…', { url, error: err1Stderr });
 
     // Attempt 2 — retry with same options
     try {
-      return await youtubedl(url, options);
+      return await runWithTimeout(youtubedl(url, options));
     } catch (err2) {
+      if (err2.code === 'EXTRACTION_TIMEOUT') {
+        log('error', 'Attempt 2 timed out', { url });
+        throw err2;
+      }
       const err2Stderr = err2.stderr || err2.message || '';
       log('warn', 'Attempt 2 (retry) failed…', { url, error: err2Stderr });
 
       // Attempt 3 — only try generic extractor for unknown / 'other' platforms.
-      // Known platforms (like instagram, youtube, tiktok, etc.) do not work with generic extractor,
-      // and generic extractor errors ('Unsupported URL') would mask the real platform error.
       if (platformName === 'other') {
         try {
-          return await youtubedl(url, {
+          return await runWithTimeout(youtubedl(url, {
             ...options,
             forceGenericExtractor: true,
-          });
+          }));
         } catch (err3) {
           log('error', 'All 3 extraction attempts failed', {
             url,
@@ -409,10 +435,16 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
 
   const qualities = [...new Set(videoDownloads.map((d) => d.quality))];
   const bestQuality = qualities[0] || null;
+  const bestMuxedFormat = videoDownloads.find((d) => d.hasAudio) || null;
+  const bestMuxedQuality = bestMuxedFormat ? bestMuxedFormat.quality : null;
+  const hasMuxedFormats = Boolean(bestMuxedFormat);
 
   const result = {
     ...baseMeta,
     bestQuality,
+    bestMuxedQuality,
+    bestMuxed: bestMuxedFormat,
+    hasMuxedFormats,
     qualities,
     downloads: videoDownloads,
     audioDownloads,

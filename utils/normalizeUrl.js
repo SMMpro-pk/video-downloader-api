@@ -57,7 +57,7 @@ function followRedirects(url, maxHops = MAX_REDIRECTS) {
     let hops = 0;
     let currentUrl = url;
 
-    async function doRequest(reqUrl) {
+    async function doRequest(reqUrl, method = 'HEAD') {
       if (hops >= maxHops) {
         return resolve(currentUrl); // give up, return whatever we have
       }
@@ -73,14 +73,21 @@ function followRedirects(url, maxHops = MAX_REDIRECTS) {
       const req = client.request(
         reqUrl,
         {
-          method: 'HEAD',
+          method,
           timeout: REDIRECT_TIMEOUT,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             Accept: 'text/html,application/xhtml+xml,*/*',
+            Range: 'bytes=0-0',
           },
         },
         async (res) => {
+          // If HEAD was rejected with 405 Method Not Allowed or 403 Forbidden, fallback to GET
+          if ((res.statusCode === 405 || res.statusCode === 403) && method === 'HEAD') {
+            res.resume();
+            return doRequest(reqUrl, 'GET');
+          }
+
           // Follow 3xx redirects
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             hops++;
@@ -101,7 +108,7 @@ function followRedirects(url, maxHops = MAX_REDIRECTS) {
 
             currentUrl = next;
             res.resume(); // drain response
-            doRequest(next);
+            doRequest(next, 'HEAD');
           } else {
             res.resume();
             resolve(currentUrl);
@@ -109,7 +116,13 @@ function followRedirects(url, maxHops = MAX_REDIRECTS) {
         },
       );
 
-      req.on('error', () => resolve(currentUrl)); // on error, return last known
+      req.on('error', () => {
+        if (method === 'HEAD') {
+          doRequest(reqUrl, 'GET');
+        } else {
+          resolve(currentUrl);
+        }
+      });
       req.on('timeout', () => {
         req.destroy();
         resolve(currentUrl);

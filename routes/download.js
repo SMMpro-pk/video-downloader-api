@@ -63,6 +63,7 @@ function handleExtractionError(err, res) {
     PLATFORM_UNSUPPORTED: 400,
     LIVE_PREMIERE_NOT_STARTED: 400,
     VIDEO_TOO_LONG: 413,
+    EXTRACTION_TIMEOUT: 504,
     EXTRACTION_FAILED: 500,
   };
 
