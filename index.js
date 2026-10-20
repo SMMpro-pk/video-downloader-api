@@ -18,6 +18,19 @@ app.set('trust proxy', 1);
 
 // --------------- Middleware ---------------
 
+// Normalize Vercel Serverless Function rewrites if req.url starts with /index.js or /api/index.js
+app.use((req, res, next) => {
+  if (req.url.startsWith('/index.js') || req.url.startsWith('/api/index.js')) {
+    const raw = req.headers['x-matched-path'] || req.headers['x-invoke-path'] || req.originalUrl;
+    if (raw && !raw.startsWith('/index.js') && !raw.startsWith('/api/index.js')) {
+      req.url = raw;
+    } else {
+      req.url = req.url.replace(/^\/(?:api\/)?index\.js/, '') || '/';
+    }
+  }
+  next();
+});
+
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
@@ -81,14 +94,18 @@ app.get('/', (req, res) => {
 const API_SECRET_KEY = boot.apiKey || '';
 
 // Public routes that don't require an API key
-const PUBLIC_PATHS = ['/api/health', '/api/version', '/api/deploy-info'];
+const PUBLIC_PATHS = [
+  '/api/health', '/api/version', '/api/deploy-info',
+  '/health', '/version', '/deploy-info',
+];
 
-app.use('/api', (req, res, next) => {
+app.use(['/api', '/download', '/info', '/batch', '/stream', '/check', '/platforms', '/stats', '/cache'], (req, res, next) => {
   // Skip auth only if key is truly disabled or empty
   if (!API_SECRET_KEY) return next();
 
   // Allow public endpoints without a key
-  if (PUBLIC_PATHS.includes(req.baseUrl + req.path)) return next();
+  const fullPath = (req.baseUrl || '') + (req.path || '');
+  if (PUBLIC_PATHS.includes(fullPath) || PUBLIC_PATHS.includes(req.path)) return next();
 
   // Check header first (x-api-key or Authorization: Bearer <key>), then query param
   let provided = req.headers['x-api-key'] || req.query.apikey;
@@ -125,7 +142,7 @@ app.use('/api', (req, res, next) => {
 // --------------- Routes ---------------
 
 // Health check (public — no API key needed)
-app.get('/api/health', (req, res) => {
+const handleHealth = (req, res) => {
   res.json({
     success: true,
     status: 'running',
@@ -138,10 +155,12 @@ app.get('/api/health', (req, res) => {
       maxConcurrent: queue.MAX_CONCURRENT,
     },
   });
-});
+};
+app.get('/api/health', handleHealth);
+app.get('/health', handleHealth);
 
 // Deploy info (public — shows live URL and environment info)
-app.get('/api/deploy-info', (req, res) => {
+const handleDeployInfo = (req, res) => {
   const fallbackUrl = `${req.protocol}://${req.get('host')}`;
   const liveUrl = boot.liveUrl || fallbackUrl;
   const isDev = process.env.NODE_ENV !== 'production';
@@ -171,10 +190,14 @@ app.get('/api/deploy-info', (req, res) => {
       stats: `${liveUrl}/api/stats`,
     },
   });
-});
+};
+app.get('/api/deploy-info', handleDeployInfo);
+app.get('/deploy-info', handleDeployInfo);
 
-// Core API routes
-app.use('/api', require('./routes/download'));
+// Core API routes (mounted on /api and root for maximum proxy compatibility)
+const downloadRoutes = require('./routes/download');
+app.use('/api', downloadRoutes);
+app.use('/', downloadRoutes);
 
 // 404 catch-all
 app.use((req, res) => {

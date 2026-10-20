@@ -5,7 +5,13 @@
   "functions": {
     "index.js": {
       "maxDuration": 60,
-      "memory": 1024
+      "memory": 1024,
+      "includeFiles": "node_modules/youtube-dl-exec/bin/**"
+    },
+    "api/index.js": {
+      "maxDuration": 60,
+      "memory": 1024,
+      "includeFiles": "node_modules/youtube-dl-exec/bin/**"
     }
   },
   "headers": [
@@ -32,10 +38,6 @@
     }
   ],
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/index.js"
-    },
     {
       "source": "/(.*)",
       "destination": "/index.js"

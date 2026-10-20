@@ -1,4 +1,4 @@
-const youtubedl = require('youtube-dl-exec');
+const { getYtdlpInstance } = require('./ytdlpHelper');
 const { detectPlatform } = require('./detectPlatform');
 const { normalizeUrl } = require('./normalizeUrl');
 const fs = require('fs');
@@ -159,6 +159,8 @@ function runWithTimeout(promise, ms = EXTRACTION_TIMEOUT, message = 'Extraction 
 
 // ─── Fallback extraction: native → retry → generic (only for 'other') → error ───
 async function runYtdlp(url, options, platformName) {
+  const youtubedl = getYtdlpInstance();
+
   // Attempt 1 — native extractor
   try {
     return await runWithTimeout(youtubedl(url, options));

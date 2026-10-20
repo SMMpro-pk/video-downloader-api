@@ -48,18 +48,27 @@ function runAll() {
     }
   }));
 
-  // 4. ffmpeg
+  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
+
+  // 4. ffmpeg (optional in serverless environments)
   results.push(check('ffmpeg', () => {
-    const out = execSync('ffmpeg -version', { encoding: 'utf8', timeout: 10_000, stdio: ['pipe', 'pipe', 'pipe'] });
-    const match = out.match(/ffmpeg version (\S+)/);
-    return match ? match[1] : 'installed';
+    try {
+      const out = execSync('ffmpeg -version', { encoding: 'utf8', timeout: 10_000, stdio: ['pipe', 'pipe', 'pipe'] });
+      const match = out.match(/ffmpeg version (\S+)/);
+      return match ? match[1] : 'installed';
+    } catch (err) {
+      if (isServerless) {
+        return 'Optional (skipped in serverless)';
+      }
+      throw err;
+    }
   }));
 
   // 5. yt-dlp binary
   results.push(check('yt-dlp', () => {
     try {
-      const ytdlp = require('youtube-dl-exec');
-      const binPath = ytdlp.constants?.YOUTUBE_DL_PATH || (ytdlp.getBinaryPath ? ytdlp.getBinaryPath() : 'yt-dlp');
+      const { getYtdlpBinary } = require('./ytdlpHelper');
+      const binPath = getYtdlpBinary();
       const { execFileSync } = require('child_process');
       const out = execFileSync(binPath, ['--version'], { encoding: 'utf8', timeout: 15_000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
       return out || 'installed';
