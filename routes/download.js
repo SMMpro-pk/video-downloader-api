@@ -249,6 +249,10 @@ router.get('/stream', async (req, res) => {
     Accept: '*/*',
   };
 
+  if (parsed.hostname.includes('instagram.com') || parsed.hostname.includes('cdninstagram.com')) {
+    outgoingHeaders['Referer'] = 'https://www.instagram.com/';
+  }
+
   // Forward Range header if client browser requested it (supports video seeking)
   if (req.headers.range) {
     outgoingHeaders['Range'] = req.headers.range;

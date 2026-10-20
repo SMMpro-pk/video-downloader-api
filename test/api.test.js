@@ -254,3 +254,28 @@ describe('HTTP API Endpoints Integration', () => {
     assert.equal(data.errorCode, 'INVALID_MEDIA_URL');
   });
 });
+
+describe('Instagram & Error Handling', () => {
+  const extractVideo = require('../utils/extractVideo');
+
+  test('correctly classifies Instagram empty media response as LOGIN_REQUIRED', () => {
+    const stderr = 'ERROR: [Instagram] C5_8Q9_O8nU: Instagram sent an empty media response. Check if this post is accessible in your browser without being logged-in.';
+    const classified = extractVideo.classifyError(stderr);
+    assert.equal(classified.code, 'LOGIN_REQUIRED');
+    assert.ok(classified.message.includes('Instagram requires authentication or session cookies'));
+  });
+
+  test('correctly classifies Instagram checkpoint verification', () => {
+    const stderr = 'ERROR: [Instagram] checkpoint_required: Please confirm your account';
+    const classified = extractVideo.classifyError(stderr);
+    assert.equal(classified.code, 'BOT_VERIFICATION_REQUIRED');
+  });
+
+  test('resolveCookiesFile returns null when no cookies exist', () => {
+    delete process.env.YTDLP_COOKIES_FILE;
+    delete process.env.COOKIES_PATH;
+    delete process.env.YTDLP_COOKIES_CONTENT;
+    assert.equal(typeof extractVideo.resolveCookiesFile, 'function');
+  });
+});
+

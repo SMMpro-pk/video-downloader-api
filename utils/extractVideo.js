@@ -25,11 +25,34 @@ function log(level, message, meta = {}) {
 
 // ─── Environment & yt-dlp Settings ───
 const YTDLP_PROXY = process.env.YTDLP_PROXY || process.env.PROXY_URL || process.env.HTTP_PROXY || null;
-const YTDLP_COOKIES = process.env.YTDLP_COOKIES_FILE || process.env.COOKIES_PATH || null;
 const YTDLP_USER_AGENT = process.env.YTDLP_USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+function resolveCookiesFile() {
+  const envFile = process.env.YTDLP_COOKIES_FILE || process.env.COOKIES_PATH;
+  if (envFile && fs.existsSync(envFile)) return envFile;
+
+  const rootCookies = path.join(__dirname, '..', 'cookies.txt');
+  if (fs.existsSync(rootCookies)) return rootCookies;
+
+  if (process.env.YTDLP_COOKIES_CONTENT) {
+    try {
+      const generated = path.join(LOG_DIR, 'env_cookies.txt');
+      fs.writeFileSync(generated, process.env.YTDLP_COOKIES_CONTENT.trim(), 'utf8');
+      return generated;
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
 
 // ─── Detailed error codes ───
 const ERROR_MAP = {
+  'empty media response'    : { code: 'LOGIN_REQUIRED',            message: 'Instagram requires authentication or session cookies to access this video. Add cookies.txt to project root or set YTDLP_COOKIES_FILE.' },
+  'not granting access'     : { code: 'LOGIN_REQUIRED',            message: 'Instagram denied anonymous access. Session cookies or authentication required.' },
+  'cookies-from-browser'    : { code: 'LOGIN_REQUIRED',            message: 'Instagram requires authentication or session cookies to access this content.' },
+  'checkpoint_required'     : { code: 'BOT_VERIFICATION_REQUIRED', message: 'Instagram requested checkpoint verification or login.' },
   'private'                 : { code: 'VIDEO_PRIVATE',             message: 'This video is private.' },
   'removed'                 : { code: 'VIDEO_REMOVED',             message: 'This video has been removed.' },
   'unavailable'             : { code: 'VIDEO_REMOVED',             message: 'This video is unavailable.' },
@@ -67,7 +90,7 @@ function classifyError(stderr) {
 const PLATFORM_OPTIONS = {
   youtube:     { addHeader: ['referer:https://www.youtube.com'] },
   facebook:    { addHeader: ['referer:https://www.facebook.com'] },
-  instagram:   { addHeader: ['referer:https://www.instagram.com'] },
+  instagram:   { addHeader: ['referer:https://www.instagram.com/', 'accept-language:en-US,en;q=0.9'] },
   tiktok:      { addHeader: ['referer:https://www.tiktok.com'] },
   twitter:     { addHeader: ['referer:https://twitter.com'] },
   reddit:      { addHeader: ['referer:https://www.reddit.com'] },
@@ -100,35 +123,50 @@ function formatBytes(bytes) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-// ─── Fallback extraction: native → retry → generic → error ───
+// ─── Fallback extraction: native → retry → generic (only for 'other') → error ───
 async function runYtdlp(url, options, platformName) {
   // Attempt 1 — native extractor
   try {
     return await youtubedl(url, options);
   } catch (err1) {
-    log('warn', 'Attempt 1 (native) failed, retrying…', { url, error: err1.stderr || err1.message });
+    const err1Stderr = err1.stderr || err1.message || '';
+    log('warn', 'Attempt 1 (native) failed, retrying…', { url, error: err1Stderr });
 
     // Attempt 2 — retry with same options
     try {
       return await youtubedl(url, options);
     } catch (err2) {
-      log('warn', 'Attempt 2 (retry) failed, trying generic extractor…', { url, error: err2.stderr || err2.message });
+      const err2Stderr = err2.stderr || err2.message || '';
+      log('warn', 'Attempt 2 (retry) failed…', { url, error: err2Stderr });
 
-      // Attempt 3 — generic extractor
-      try {
-        return await youtubedl(url, {
-          ...options,
-          forceGenericExtractor: true,
-        });
-      } catch (err3) {
-        log('error', 'All 3 extraction attempts failed', {
-          url,
-          platform: platformName,
-          error: err3.stderr || err3.message,
-        });
-        // Throw the last error for classification
-        throw err3;
+      // Attempt 3 — only try generic extractor for unknown / 'other' platforms.
+      // Known platforms (like instagram, youtube, tiktok, etc.) do not work with generic extractor,
+      // and generic extractor errors ('Unsupported URL') would mask the real platform error.
+      if (platformName === 'other') {
+        try {
+          return await youtubedl(url, {
+            ...options,
+            forceGenericExtractor: true,
+          });
+        } catch (err3) {
+          log('error', 'All 3 extraction attempts failed', {
+            url,
+            platform: platformName,
+            error: err3.stderr || err3.message,
+          });
+          err3.primaryStderr = err1Stderr || err3.stderr;
+          throw err3;
+        }
       }
+
+      log('error', 'Extraction attempts failed', {
+        url,
+        platform: platformName,
+        error: err1Stderr,
+      });
+      // Attach the native error so classification accurately reflects the platform failure
+      err1.primaryStderr = err1Stderr;
+      throw err1;
     }
   }
 }
@@ -168,7 +206,6 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     dumpSingleJson: true,
     noWarnings: true,
     preferFreeFormats: true,
-    youtubeSkipDashManifest: false,
     noPlaylist: true,
     userAgent: YTDLP_USER_AGENT,
   };
@@ -177,8 +214,11 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     baseOptions.proxy = YTDLP_PROXY;
   }
 
-  if (YTDLP_COOKIES && fs.existsSync(YTDLP_COOKIES)) {
-    baseOptions.cookies = YTDLP_COOKIES;
+  const cookiesFile = resolveCookiesFile();
+  if (cookiesFile) {
+    baseOptions.cookies = cookiesFile;
+  } else if (process.env.YTDLP_COOKIES_FROM_BROWSER) {
+    baseOptions.cookiesFromBrowser = process.env.YTDLP_COOKIES_FROM_BROWSER;
   }
 
   const platformOverrides = PLATFORM_OPTIONS[platformName] || {};
@@ -189,7 +229,8 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
   try {
     data = await runYtdlp(url, options, platformName);
   } catch (err) {
-    const classified = classifyError(err.stderr || err.message);
+    const errorStderr = err.primaryStderr || err.stderr || err.message;
+    const classified = classifyError(errorStderr);
     const error = new Error(classified.code);
     error.errorCode = classified.code;
     error.errorMessage = classified.message;
@@ -380,5 +421,8 @@ function formatDuration(seconds) {
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
+
+extractVideo.classifyError = classifyError;
+extractVideo.resolveCookiesFile = resolveCookiesFile;
 
 module.exports = extractVideo;
