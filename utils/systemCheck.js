@@ -7,12 +7,16 @@ const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-function check(name, fn) {
+// Serverless runtimes (Netlify Functions) don't ship npm or ffmpeg — treat them as optional there
+const IS_SERVERLESS = Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY_FUNCTION);
+
+function check(name, fn, { optional = false, optionalNote } = {}) {
   try {
     const detail = fn();
     return { name, ok: true, detail };
   } catch (err) {
-    return { name, ok: false, detail: err.message || 'Not found' };
+    if (optional && optionalNote) return { name, ok: false, optional, detail: optionalNote };
+    return { name, ok: false, optional, detail: err.message || 'Not found' };
   }
 }
 
@@ -24,8 +28,8 @@ function runAll() {
 
   // 2. npm
   results.push(check('npm', () => {
-    return execSync('npm --version', { encoding: 'utf8', timeout: 10_000 }).trim();
-  }));
+    return execSync('npm --version', { encoding: 'utf8', timeout: 10_000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+  }, { optional: IS_SERVERLESS, optionalNote: 'Not available in serverless runtime (not required)' }));
 
   // 3. Python
   results.push(check('Python', () => {
@@ -53,7 +57,8 @@ function runAll() {
     const out = execSync('ffmpeg -version', { encoding: 'utf8', timeout: 10_000, stdio: ['pipe', 'pipe', 'pipe'] });
     const match = out.match(/ffmpeg version (\S+)/);
     return match ? match[1] : 'installed';
-  }));
+    // The API only extracts metadata and proxies direct media URLs — it never merges or transcodes
+  }, { optional: true, optionalNote: 'Not installed (optional — only needed for merging/transcoding, which this API does not do)' }));
 
   // 5. yt-dlp binary
   results.push(check('yt-dlp', () => {
@@ -83,7 +88,7 @@ function runAll() {
 
   // 8. logs directory writable
   results.push(check('logs/ directory', () => {
-    const logDir = path.join(__dirname, '..', 'logs');
+    const logDir = process.env.LOG_DIR || path.join(__dirname, '..', 'logs');
     if (!fs.existsSync(logDir)) {
       fs.mkdirSync(logDir, { recursive: true });
     }
@@ -95,9 +100,9 @@ function runAll() {
   }));
 
   // Summary
-  const allOk = results.every((r) => r.ok);
-  const passed = results.filter((r) => r.ok).length;
-  const failed = results.filter((r) => !r.ok).length;
+  const allOk = results.every((r) => r.ok || r.optional);
+  const failed = results.filter((r) => !r.ok && !r.optional).length;
+  const passed = results.length - failed;
 
   return { allOk, passed, failed, total: results.length, checks: results };
 }

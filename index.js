@@ -195,6 +195,11 @@ app.use((err, req, res, _next) => {
   });
 });
 
+module.exports = app;
+
+// When imported (e.g. by the Netlify Function), skip auto-update and server startup
+if (require.main === module) {
+
 // --------------- yt-dlp auto-update on startup ---------------
 
 (async () => {
@@ -262,3 +267,5 @@ process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
   process.exit(1);
 });
+
+}

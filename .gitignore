@@ -31,3 +31,6 @@ Thumbs.db
 .koyeb/
 .render/
 .railway/
+
+# Local Netlify folder
+.netlify

@@ -1,0 +1,15 @@
+[build]
+  command = "node scripts/fetch-ytdlp-standalone.js"
+  publish = "public"
+
+[functions]
+  node_bundler = "nft"
+  # Ship the standalone yt-dlp binary with the API function
+  included_files = ["node_modules/youtube-dl-exec/bin/yt-dlp_linux"]
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"

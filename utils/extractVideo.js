@@ -11,7 +11,7 @@ const MAX_FILE_SIZE      = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_FORMATS        = parseInt(process.env.MAX_FORMATS, 10) || 10;
 
 // ─── Logger ───
-const LOG_DIR = path.join(__dirname, '..', 'logs');
+const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '..', 'logs');
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
 function log(level, message, meta = {}) {

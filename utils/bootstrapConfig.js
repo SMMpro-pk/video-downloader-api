@@ -55,6 +55,13 @@ function detectDeployment() {
     };
   }
 
+  if (process.env.NETLIFY === 'true') {
+    return {
+      platform: 'netlify',
+      liveUrl: process.env.URL || null,
+    };
+  }
+
   if (process.env.KOYEB_PUBLIC_DOMAIN) {
     return {
       platform: 'koyeb',

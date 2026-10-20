@@ -42,15 +42,16 @@ function renderDashboard({ pkg, status, cacheInfo, queueInfo, boot, uptime }) {
 
   const checksHtml = status.checks.map((c) => {
     const isOk = c.ok;
-    const badgeBg = isOk ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)';
-    const badgeColor = isOk ? '#10b981' : '#f87171';
+    const isOptional = !isOk && c.optional;
+    const badgeBg = isOk ? 'rgba(16, 185, 129, 0.12)' : isOptional ? 'rgba(156, 163, 175, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+    const badgeColor = isOk ? '#10b981' : isOptional ? '#9ca3af' : '#f87171';
     return `
       <tr>
-        <td style="padding:12px 16px;width:32px"><span style="color:${badgeColor};font-size:14px">${isOk ? '✔' : '✖'}</span></td>
+        <td style="padding:12px 16px;width:32px"><span style="color:${badgeColor};font-size:14px">${isOk ? '✔' : isOptional ? '–' : '✖'}</span></td>
         <td style="padding:12px 16px;font-weight:600;color:#f3f4f6">${esc(c.name)}</td>
         <td style="padding:12px 16px;color:#9ca3af;font-family:monospace;font-size:13px">${esc(c.detail)}</td>
         <td style="padding:12px 16px;text-align:right">
-          <span style="background:${badgeBg};color:${badgeColor};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600">${isOk ? 'ACTIVE' : 'MISSING'}</span>
+          <span style="background:${badgeBg};color:${badgeColor};padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600">${isOk ? 'ACTIVE' : isOptional ? 'OPTIONAL' : 'MISSING'}</span>
         </td>
       </tr>`;
   }).join('');
@@ -572,7 +573,7 @@ function renderDashboard({ pkg, status, cacheInfo, queueInfo, boot, uptime }) {
     <div class="card" style="border-color:#ef4444">
       <div class="card-header" style="color:#ef4444">⚠️ Fix Required</div>
       <table>
-        ${status.checks.filter(c => !c.ok).map(c => `
+        ${status.checks.filter(c => !c.ok && !c.optional).map(c => `
         <tr style="background:rgba(239, 68, 68, 0.08)">
           <td style="padding:12px 16px;color:#fca5a5;font-weight:600">${esc(c.name)}</td>
           <td style="padding:12px 16px;color:#fca5a5;font-family:monospace">${esc(getFixHint(c.name))}</td>
