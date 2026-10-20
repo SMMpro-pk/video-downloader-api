@@ -1,25 +1,36 @@
-app = "video-downloader-api"
-primary_region = "iad"
+# fly.toml app configuration file generated for video-downloader-api on 2026-10-20T09:26:54Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'video-downloader-api'
+primary_region = 'iad'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
+
+[env]
+  AUTO_GENERATE_API_KEY = 'true'
+  MAX_CONCURRENT = '5'
+  NODE_ENV = 'production'
+  RATE_LIMIT_MAX = '100'
 
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = false
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
 
   [[http_service.checks]]
-    interval = "30s"
-    timeout = "5s"
-    grace_period = "10s"
-    method = "get"
-    path = "/api/health"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'get'
+    path = '/api/health'
 
-[env]
-  NODE_ENV = "production"
-  AUTO_GENERATE_API_KEY = "true"
-  RATE_LIMIT_MAX = "100"
-  MAX_CONCURRENT = "5"
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024
