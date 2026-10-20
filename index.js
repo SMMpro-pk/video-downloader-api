@@ -195,60 +195,67 @@ app.use((err, req, res, _next) => {
   });
 });
 
-// --------------- yt-dlp auto-update on startup ---------------
-
-(async () => {
-  try {
-    const { execSync } = require('child_process');
-    console.log('🔄  Checking yt-dlp for updates…');
-    execSync('node scripts/update-ytdlp.js', { cwd: __dirname, timeout: 120_000, stdio: 'inherit' });
-  } catch {
-    console.log('⚠️  yt-dlp auto-update skipped (run "npm run update-ytdlp" manually)');
-  }
-})();
-
 // --------------- Start ---------------
 
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
-  const runningUrl = boot.liveUrl || `http://localhost:${PORT}`;
-  console.log(`✅  Video Downloader API v${pkg.version} running on ${runningUrl}`);
-  console.log(`🌐  Deployment platform: ${boot.deploymentPlatform}`);
-  if (boot.apiAuthEnabled) {
-    console.log(`🔐  Active API key: ${boot.apiKey}`);
-  } else {
-    console.log('🔓  API key auth disabled (local/dev mode).');
-  }
-  if (boot.apiKeyGenerated) {
-    console.log('🔐  API_SECRET_KEY was auto-generated for this deployment.');
-  }
-  console.log(`📘  Deploy details: GET ${runningUrl}/api/deploy-info`);
-  console.log(`📚  Health:     GET /api/health`);
-  console.log(`📚  Info:       GET/POST /api/info?url=<video_url>`);
-  console.log(`📚  Download:   GET/POST /api/download?url=<video_url>`);
-  console.log(`📚  Batch:      POST /api/batch`);
-  console.log(`📚  Stream:     GET /api/stream?url=<media_url>`);
-  console.log(`📚  Check URL:  GET/POST /api/check?url=<video_url>`);
-  console.log(`📚  Platforms:  GET /api/platforms`);
-  console.log(`📚  Stats:      GET /api/stats`);
-  console.log(`📚  Version:    GET /api/version`);
-  console.log(`📚  Cache:      GET /api/cache | DELETE /api/cache`);
-  console.log(`⚡  Queue:      max ${queue.MAX_CONCURRENT} concurrent extractions`);
-});
+let server;
+
+// Start server if running directly (or in container/PaaS like Render/Railway/Fly/Koyeb)
+if (require.main === module) {
+  server = app.listen(PORT, () => {
+    const runningUrl = boot.liveUrl || `http://localhost:${PORT}`;
+    console.log(`✅  Video Downloader API v${pkg.version} running on ${runningUrl}`);
+    console.log(`🌐  Deployment platform: ${boot.deploymentPlatform}`);
+    if (boot.apiAuthEnabled) {
+      console.log(`🔐  Active API key: ${boot.apiKey}`);
+    } else {
+      console.log('🔓  API key auth disabled (local/dev mode).');
+    }
+    if (boot.apiKeyGenerated) {
+      console.log('🔐  API_SECRET_KEY was auto-generated for this deployment.');
+    }
+    console.log(`📘  Deploy details: GET ${runningUrl}/api/deploy-info`);
+    console.log(`📚  Health:     GET /api/health`);
+    console.log(`📚  Info:       GET/POST /api/info?url=<video_url>`);
+    console.log(`📚  Download:   GET/POST /api/download?url=<video_url>`);
+    console.log(`📚  Batch:      POST /api/batch`);
+    console.log(`📚  Stream:     GET /api/stream?url=<media_url>`);
+    console.log(`📚  Check URL:  GET/POST /api/check?url=<video_url>`);
+    console.log(`📚  Platforms:  GET /api/platforms`);
+    console.log(`📚  Stats:      GET /api/stats`);
+    console.log(`📚  Version:    GET /api/version`);
+    console.log(`📚  Cache:      GET /api/cache | DELETE /api/cache`);
+    console.log(`⚡  Queue:      max ${queue.MAX_CONCURRENT} concurrent extractions`);
+
+    // Async yt-dlp check after server starts listening (never blocks the port listener or healthchecks)
+    if (process.env.AUTO_UPDATE_YTDLP !== 'false') {
+      const { exec } = require('child_process');
+      exec('node scripts/update-ytdlp.js', { cwd: __dirname }, (err, stdout) => {
+        if (!err && stdout && stdout.includes('yt-dlp is up to date')) {
+          console.log('✅  yt-dlp binary is verified up to date.');
+        }
+      });
+    }
+  });
+}
 
 // --------------- Graceful Shutdown ---------------
 
 function shutdown(signal) {
   console.log(`\n🛑  Received ${signal}. Shutting down gracefully…`);
-  server.close(() => {
-    console.log('✅  HTTP server closed.');
+  if (server) {
+    server.close(() => {
+      console.log('✅  HTTP server closed.');
+      process.exit(0);
+    });
+    // Force exit after 10 seconds if connections don't close
+    setTimeout(() => {
+      console.error('⚠️  Forced shutdown after timeout.');
+      process.exit(1);
+    }, 10_000).unref();
+  } else {
     process.exit(0);
-  });
-  // Force exit after 10 seconds if connections don't close
-  setTimeout(() => {
-    console.error('⚠️  Forced shutdown after timeout.');
-    process.exit(1);
-  }, 10_000).unref();
+  }
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
@@ -262,3 +269,6 @@ process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
   process.exit(1);
 });
+
+module.exports = app;
+

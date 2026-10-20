@@ -1,8 +1,8 @@
 FROM node:20-slim
 
-# Install system dependencies (ffmpeg, python3, certificates)
+# Install system dependencies (ffmpeg, python3, certificates, curl)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg python3 ca-certificates curl && \
+    apt-get install -y --no-install-recommends ffmpeg python3 python-is-python3 ca-certificates curl && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -18,10 +18,11 @@ RUN npm ci --omit=dev
 # Copy application source code
 COPY . .
 
-# Create logs directory
-RUN mkdir -p logs
+# Create logs directory with permissive permissions for non-root containers
+RUN mkdir -p logs && chmod 777 logs
 
-# Update yt-dlp binary at build time
+# Ensure yt-dlp binary is executable and updated
+RUN chmod -R +x node_modules/youtube-dl-exec/bin || true
 RUN node scripts/update-ytdlp.js || true
 
 EXPOSE 3000

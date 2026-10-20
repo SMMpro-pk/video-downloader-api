@@ -47,7 +47,7 @@ function createApiKey() {
 }
 
 function detectDeployment() {
-  if (process.env.VERCEL === '1') {
+  if (process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV)) {
     const host = process.env.VERCEL_URL;
     return {
       platform: 'vercel',

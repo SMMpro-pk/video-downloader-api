@@ -83,15 +83,20 @@ function runAll() {
 
   // 8. logs directory writable
   results.push(check('logs/ directory', () => {
-    const logDir = path.join(__dirname, '..', 'logs');
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
+    try {
+      const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
+      const logDir = isServerless ? path.join(require('os').tmpdir(), 'vdl-logs') : path.join(__dirname, '..', 'logs');
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      // Test write
+      const testFile = path.join(logDir, '.write-test');
+      fs.writeFileSync(testFile, 'ok');
+      fs.unlinkSync(testFile);
+      return isServerless ? 'writable (tmpdir)' : 'writable';
+    } catch {
+      return 'in-memory (serverless read-only filesystem)';
     }
-    // Test write
-    const testFile = path.join(logDir, '.write-test');
-    fs.writeFileSync(testFile, 'ok');
-    fs.unlinkSync(testFile);
-    return 'writable';
   }));
 
   // Summary

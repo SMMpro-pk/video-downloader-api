@@ -6,6 +6,7 @@
  */
 const { execSync } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 let ytdlpBin;
 try {
@@ -18,6 +19,13 @@ if (!ytdlpBin) {
   const binDir = path.dirname(require.resolve('youtube-dl-exec'));
   const exeName = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
   ytdlpBin = path.join(binDir, '..', 'bin', exeName);
+}
+
+// Ensure execution permission on Linux / macOS
+if (process.platform !== 'win32' && ytdlpBin && fs.existsSync(ytdlpBin)) {
+  try {
+    fs.chmodSync(ytdlpBin, 0o755);
+  } catch {}
 }
 
 console.log('🔄  Checking for yt-dlp updates...');
@@ -40,6 +48,11 @@ try {
       stdio: 'inherit',
       cwd: path.join(__dirname, '..'),
     });
+    if (process.platform !== 'win32' && ytdlpBin && fs.existsSync(ytdlpBin)) {
+      try {
+        fs.chmodSync(ytdlpBin, 0o755);
+      } catch {}
+    }
     console.log('✅  youtube-dl-exec reinstalled with latest yt-dlp binary.');
   } catch (err2) {
     console.warn('⚠️  Could not update yt-dlp binary during build (using existing binary):', err2.message);

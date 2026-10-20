@@ -277,5 +277,13 @@ describe('Instagram & Error Handling', () => {
     delete process.env.YTDLP_COOKIES_CONTENT;
     assert.equal(typeof extractVideo.resolveCookiesFile, 'function');
   });
+
+  test('root index.js exports the express application for serverless/Vercel', () => {
+    const rootApp = require('../index');
+    assert.equal(typeof rootApp, 'function');
+    assert.equal(typeof rootApp.use, 'function');
+    assert.equal(typeof rootApp.get, 'function');
+  });
 });
+
 

@@ -11,14 +11,27 @@ const MAX_FILE_SIZE      = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_FORMATS        = parseInt(process.env.MAX_FORMATS, 10) || 10;
 
 // ─── Logger ───
-const LOG_DIR = path.join(__dirname, '..', 'logs');
-if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+const os = require('os');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
+const LOG_DIR = isServerless
+  ? path.join(os.tmpdir(), 'vdl-logs')
+  : path.join(__dirname, '..', 'logs');
+
+try {
+  if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+} catch {
+  // Gracefully handle read-only environments
+}
 
 function log(level, message, meta = {}) {
   const entry = { timestamp: new Date().toISOString(), level, message, ...meta };
   const line = JSON.stringify(entry) + '\n';
-  const file = path.join(LOG_DIR, `${new Date().toISOString().slice(0, 10)}.log`);
-  fs.appendFileSync(file, line);
+  try {
+    const file = path.join(LOG_DIR, `${new Date().toISOString().slice(0, 10)}.log`);
+    fs.appendFileSync(file, line);
+  } catch {
+    // Graceful fallback for read-only serverless filesystems
+  }
   if (level === 'error') console.error(`[${level}] ${message}`);
   else if (level === 'warn') console.warn(`[${level}] ${message}`);
 }
@@ -36,7 +49,8 @@ function resolveCookiesFile() {
 
   if (process.env.YTDLP_COOKIES_CONTENT) {
     try {
-      const generated = path.join(LOG_DIR, 'env_cookies.txt');
+      const targetDir = isServerless ? os.tmpdir() : LOG_DIR;
+      const generated = path.join(targetDir, 'env_cookies.txt');
       fs.writeFileSync(generated, process.env.YTDLP_COOKIES_CONTENT.trim(), 'utf8');
       return generated;
     } catch {
