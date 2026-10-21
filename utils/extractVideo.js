@@ -354,7 +354,9 @@ async function extractVideo(rawUrl, { infoOnly = false, filter = 'all', hasAudio
   // ─ Frontend-friendly flags ─
   const isLiveStream = Boolean(data.is_live);
   const isShortVideo = Boolean(duration && duration <= 60);
-  const hasVideoFormats = (data.formats || []).some((f) => f.vcodec && f.vcodec !== 'none');
+  const hasVideoFormats = (data.formats || []).some(
+    (f) => (f.vcodec && f.vcodec !== 'none') || f.height > 0 || f.width > 0 || f.ext === 'mp4' || f.ext === 'webm'
+  ) || Boolean(data.width || data.height);
   const isAudioOnly = !hasVideoFormats;
 
   // ─ Base metadata ─
@@ -404,14 +406,22 @@ async function extractVideo(rawUrl, { infoOnly = false, filter = 'all', hasAudio
   const parsedFormats = formats
     .filter((f) => f && f.url && (f.protocol === 'https' || f.protocol === 'http' || !f.protocol || f.protocol.startsWith('http')))
     .map((f) => {
-      const hasAudioTrack = Boolean(f.acodec && f.acodec !== 'none');
-      const hasVideoTrack = Boolean(f.vcodec && f.vcodec !== 'none');
-      const isMuxed = hasAudioTrack && hasVideoTrack;
+      // Accurately detect audio and video tracks even when yt-dlp omits codecs for progressive MP4s
+      const isExplicitNoAudio = f.acodec === 'none';
+      const isExplicitNoVideo = f.vcodec === 'none' || (!f.vcodec && !f.height && !f.width && (f.ext === 'm4a' || f.ext === 'mp3' || f.ext === 'opus' || f.ext === 'aac' || f.ext === 'wav'));
+
+      const hasAudioTrack = !isExplicitNoAudio && (Boolean(f.acodec) || isExplicitNoVideo || (f.ext === 'mp4' && !f.vcodec));
+      const hasVideoTrack = !isExplicitNoVideo && (Boolean(f.vcodec) || Boolean(f.height) || Boolean(f.width) || f.ext === 'mp4');
+
+      const audioOnly = hasAudioTrack && !hasVideoTrack;
       const videoOnly = hasVideoTrack && !hasAudioTrack;
-      const audioOnly = !hasVideoTrack && hasAudioTrack;
+      const isMuxed = hasAudioTrack && hasVideoTrack;
+      const type = audioOnly ? 'audio' : 'video';
 
       const filesize = f.filesize || f.filesize_approx || null;
-      const qualityLabel = f.height ? `${f.height}p` : f.format_note || 'Standard';
+      const qualityLabel = audioOnly
+        ? (f.abr ? `${Math.round(f.abr)}kbps` : (f.format_note || 'Audio'))
+        : (f.height ? `${f.height}p` : f.format_note || 'Standard');
       const ext = f.ext || (audioOnly ? 'm4a' : 'mp4');
       const safeFilename = `${safeTitle}_${qualityLabel}.${ext}`;
       const streamUrl = `/api/stream?url=${encodeURIComponent(f.url)}&filename=${encodeURIComponent(safeFilename)}`;
@@ -423,6 +433,7 @@ async function extractVideo(rawUrl, { infoOnly = false, filter = 'all', hasAudio
         quality: qualityLabel,
         format: ext,
         ext,
+        type,
         filesize,
         filesizeFormatted: formatBytes(filesize),
         hasAudio: hasAudioTrack,
@@ -475,6 +486,7 @@ async function extractVideo(rawUrl, { infoOnly = false, filter = 'all', hasAudio
       quality: qualityLabel,
       format: ext,
       ext,
+      type: 'video',
       filesize: data.filesize || null,
       filesizeFormatted: formatBytes(data.filesize),
       hasAudio: true,
@@ -494,30 +506,49 @@ async function extractVideo(rawUrl, { infoOnly = false, filter = 'all', hasAudio
     });
   }
 
-  // ─── AUDIO FALLBACK for platforms with only muxed streams (Instagram, TikTok, Twitter, Douyin) ───
-  // If no standalone audio streams exist, synthesize audio options from the best muxed stream
-  if (audioDownloads.length === 0) {
-    const bestSource = muxedDownloads[0] || (data.url ? { url: data.url, filesize: data.filesize } : null);
+  // ─── AUDIO AVAILABILITY GUARANTEE ───
+  // Ensure Audio (MP3) is always available in audioDownloads
+  const hasMp3Audio = audioDownloads.some((a) => a.format === 'mp3' || a.ext === 'mp3');
+  if (!hasMp3Audio) {
+    const bestSource = muxedDownloads[0] || (data.url ? { url: data.url } : (audioDownloads[0] || null));
     if (bestSource) {
-      audioDownloads.push({
+      audioDownloads.unshift({
         quality: 'Audio (MP3)',
         format: 'mp3',
         ext: 'mp3',
+        type: 'audio',
         abr: 128,
         filesize: null,
         filesizeFormatted: null,
+        hasAudio: true,
+        isMuxed: false,
+        videoOnly: false,
+        audioOnly: true,
         formatId: 'audio-mp3',
         isDerivedFromVideo: true,
         url: bestSource.url,
         streamUrl: `/api/stream?url=${encodeURIComponent(url)}&type=audio&filename=${encodeURIComponent(`${safeTitle}.mp3`)}`,
       });
+    }
+  }
+
+  // If no M4A audio exists, also provide an M4A option
+  const hasM4aAudio = audioDownloads.some((a) => a.format === 'm4a' || a.ext === 'm4a');
+  if (!hasM4aAudio) {
+    const bestSource = muxedDownloads[0] || (data.url ? { url: data.url } : null);
+    if (bestSource) {
       audioDownloads.push({
         quality: 'Audio (M4A)',
         format: 'm4a',
         ext: 'm4a',
+        type: 'audio',
         abr: 128,
         filesize: null,
         filesizeFormatted: null,
+        hasAudio: true,
+        isMuxed: false,
+        videoOnly: false,
+        audioOnly: true,
         formatId: 'audio-m4a',
         isDerivedFromVideo: true,
         url: bestSource.url,
@@ -543,25 +574,33 @@ async function extractVideo(rawUrl, { infoOnly = false, filter = 'all', hasAudio
   const mergedDownloadUrl = `/api/stream?url=${encodeURIComponent(url)}&merge=true&quality=best&filename=${encodeURIComponent(`${safeTitle}.mp4`)}`;
   const audioDownloadUrl = `/api/stream?url=${encodeURIComponent(url)}&type=audio&filename=${encodeURIComponent(`${safeTitle}.mp3`)}`;
 
+  const allVideoDownloads = [...muxedDownloads, ...videoOnlyDownloads].sort(
+    (a, b) => getQualityScore(b.quality, b) - getQualityScore(a.quality, a)
+  );
+
   // Construct primary `downloads` array
-  // Crucial design: We ensure muxed formats are always present and not crowded out by video-only formats!
+  // Crucial design: We ensure BOTH video and audio formats are present in downloads and formats arrays
   let combinedDownloads = [];
 
   const requestedAudioOnly = filter === 'audio' || type === 'audio';
-  const requestedMuxedOnly = filter === 'muxed' || hasAudio === true || hasAudio === 'true';
+  const requestedVideoOnly = filter === 'video' || type === 'video';
+  const requestedMuxedOnly = filter === 'muxed';
 
   if (requestedAudioOnly) {
     combinedDownloads = audioDownloads.slice(0, MAX_FORMATS);
+  } else if (requestedVideoOnly) {
+    combinedDownloads = allVideoDownloads.slice(0, MAX_FORMATS);
   } else if (requestedMuxedOnly) {
+    // Only video formats with audio (no silent tracks, no standalone audio)
     if (muxedDownloads.length > 0) {
       combinedDownloads = muxedDownloads.slice(0, MAX_FORMATS);
     } else {
-      // If no direct muxed formats exist, provide the on-the-fly merged stream as the primary option
       combinedDownloads = [
         {
           quality: 'Best (Audio+Video Merged)',
           format: 'mp4',
           ext: 'mp4',
+          type: 'video',
           filesize: null,
           filesizeFormatted: null,
           hasAudio: true,
@@ -576,30 +615,57 @@ async function extractVideo(rawUrl, { infoOnly = false, filter = 'all', hasAudio
       ];
     }
   } else {
-    // Default mode:
-    // 1. Keep one best format per resolution in videoOnlyDownloads (skipping qualities already present in muxed)
-    const seenQualities = new Set(muxedDownloads.map((m) => m.quality));
-    const cleanVideoOnly = [];
-    for (const v of videoOnlyDownloads) {
-      if (!seenQualities.has(v.quality)) {
-        seenQualities.add(v.quality);
-        cleanVideoOnly.push(v);
+    // Default & guaranteed audio mode (hasAudio === true || filter === 'all'):
+    // Return BOTH Video options AND Audio options in the primary downloads array!
+
+    // 1. Video formats:
+    let videoList = [];
+    if (muxedDownloads.length > 0) {
+      videoList = muxedDownloads.slice(0, 5);
+      // If hasAudio is not strictly required, also include top clean videoOnly resolutions with mergedStreamUrl
+      if (!hasAudio || hasAudio === 'false') {
+        const seenQualities = new Set(muxedDownloads.map((m) => m.quality));
+        for (const v of videoOnlyDownloads) {
+          if (!seenQualities.has(v.quality) && videoList.length < MAX_FORMATS - 2) {
+            seenQualities.add(v.quality);
+            videoList.push(v);
+          }
+        }
+      }
+    } else if (videoOnlyDownloads.length > 0) {
+      // If no direct muxed formats exist, provide the synthetic merged stream + top videoOnly with merged URLs
+      videoList.push({
+        quality: 'Best (Audio+Video Merged)',
+        format: 'mp4',
+        ext: 'mp4',
+        type: 'video',
+        filesize: null,
+        filesizeFormatted: null,
+        hasAudio: true,
+        isMuxed: true,
+        videoOnly: false,
+        audioOnly: false,
+        url: mergedDownloadUrl,
+        streamUrl: mergedDownloadUrl,
+        mergedStreamUrl: mergedDownloadUrl,
+        isSyntheticMerged: true,
+      });
+
+      const seenQualities = new Set(['Best (Audio+Video Merged)']);
+      for (const v of videoOnlyDownloads) {
+        if (!seenQualities.has(v.quality) && videoList.length < 5) {
+          seenQualities.add(v.quality);
+          videoList.push(v);
+        }
       }
     }
 
-    // 2. Guarantee that muxed formats with audio are NEVER pushed out by silent formats
-    const remainingSlots = Math.max(MAX_FORMATS - muxedDownloads.length, 3);
-    const topVideoOnly = cleanVideoOnly.slice(0, remainingSlots);
+    // 2. Audio formats:
+    const audioList = audioDownloads.slice(0, 3);
 
-    // Combine and sort by quality
-    combinedDownloads = [...muxedDownloads, ...topVideoOnly].sort(
-      (a, b) => getQualityScore(b.quality, b) - getQualityScore(a.quality, a)
-    );
+    // 3. Combined list containing BOTH video and audio:
+    combinedDownloads = [...videoList, ...audioList];
   }
-
-  const allVideoDownloads = [...muxedDownloads, ...videoOnlyDownloads].sort(
-    (a, b) => getQualityScore(b.quality, b) - getQualityScore(a.quality, a)
-  );
 
   const qualities = [...new Set(allVideoDownloads.map((d) => d.quality))];
   const bestQuality = qualities[0] || (bestVideoWithAudio ? bestVideoWithAudio.quality : null);
@@ -618,6 +684,7 @@ async function extractVideo(rawUrl, { infoOnly = false, filter = 'all', hasAudio
     audioDownloadUrl,
     qualities,
     downloads: combinedDownloads,
+    formats: combinedDownloads, // Ensures clients reading 'formats' or 'downloads' receive both video & audio
     muxedDownloads: muxedDownloads.slice(0, MAX_FORMATS),
     videoOnlyDownloads: videoOnlyDownloads.slice(0, MAX_FORMATS),
     audioDownloads: audioDownloads.slice(0, MAX_FORMATS),
