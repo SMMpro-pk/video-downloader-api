@@ -123,7 +123,6 @@ function classifyError(stderr) {
 const PLATFORM_OPTIONS = {
   youtube: {
     addHeader: ['referer:https://www.youtube.com'],
-    extractorArgs: 'youtube:player_client=all',
   },
   facebook: { addHeader: ['referer:https://www.facebook.com'] },
   instagram: { addHeader: ['referer:https://www.instagram.com/', 'accept-language:en-US,en;q=0.9'] },

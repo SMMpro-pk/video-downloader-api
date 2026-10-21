@@ -26,13 +26,22 @@ echo -e "\n${BLUE}📦 Step 1: Installing System Dependencies (ffmpeg, python3, 
 if command -v apt-get &> /dev/null; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
-  apt-get install -y curl ffmpeg python3 python3-pip ca-certificates git
+  apt-get install -y curl ffmpeg python3 python3-pip ca-certificates git unzip
 elif command -v dnf &> /dev/null; then
-  dnf install -y curl ffmpeg python3 git
+  dnf install -y curl ffmpeg python3 git unzip
 elif command -v yum &> /dev/null; then
-  yum install -y curl ffmpeg python3 git
+  yum install -y curl ffmpeg python3 git unzip
 elif command -v apk &> /dev/null; then
-  apk add --no-cache curl ffmpeg python3 git nodejs npm
+  apk add --no-cache curl ffmpeg python3 git nodejs npm unzip
+fi
+
+# Ensure Deno JS runtime is installed for yt-dlp YouTube challenge solver
+if ! command -v deno &> /dev/null; then
+  echo "Installing Deno for yt-dlp JavaScript challenge solver..."
+  curl -fsSL https://deno.land/install.sh | sh
+  if [ -f "$HOME/.deno/bin/deno" ]; then
+    ln -sf "$HOME/.deno/bin/deno" /usr/local/bin/deno 2>/dev/null || true
+  fi
 fi
 
 # 3. Ensure Node.js (20+) is installed
