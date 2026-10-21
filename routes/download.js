@@ -1,12 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const http = require('http');
-const https = require('https');
-const { URL } = require('url');
 const extractVideo = require('../utils/extractVideo');
 const { getSupportedPlatforms, detectPlatform } = require('../utils/detectPlatform');
 const { normalizeUrl } = require('../utils/normalizeUrl');
 const { validateSafeUrl } = require('../utils/security');
+const {
+  proxyMediaStream,
+  streamMergedMedia,
+  streamAudioMedia,
+  streamDirectFfmpegMerge,
+} = require('../utils/streamHelper');
 const cache = require('../utils/cache');
 const queue = require('../utils/queue');
 const stats = require('../utils/stats');
@@ -106,14 +109,24 @@ async function handleInfo(req, res) {
 
 /**
  * Handle extraction logic for /download
+ * Accepts options:
+ * - filter: 'all' | 'muxed' | 'audio' | 'video'
+ * - hasAudio: boolean (when true, returns only formats with sound)
+ * - quality: target quality (e.g. '1080p', '720p', 'best', 'audio')
+ * - type: 'audio' | 'video'
  */
 async function handleDownload(req, res) {
   const startTime = Date.now();
   const url = getUrlFromRequest(req);
   if (!(await validateUrl(url, res))) return;
 
+  const filter = (req.query.filter || req.body.filter || req.query.type || req.body.type || 'all').toLowerCase();
+  const hasAudio = req.query.hasAudio !== undefined ? req.query.hasAudio === 'true' || req.query.hasAudio === true : req.body.hasAudio;
+  const quality = req.query.quality || req.body.quality || null;
+  const type = req.query.type || req.body.type || null;
+
   try {
-    const cacheKey = url.trim().toLowerCase();
+    const cacheKey = `download:${url.trim().toLowerCase()}:f=${filter}:a=${hasAudio}:q=${quality}`;
     const cached = cache.get(cacheKey);
 
     if (cached) {
@@ -122,7 +135,9 @@ async function handleDownload(req, res) {
       return res.json({ success: true, cached: true, processingTime: `${Date.now() - startTime}ms`, ...cached });
     }
 
-    const result = await queue.run(() => extractVideo(url));
+    const result = await queue.run(() =>
+      extractVideo(url, { filter, hasAudio, quality, type })
+    );
 
     cache.set(cacheKey, result);
     stats.trackRequest(result.platform);
@@ -132,6 +147,16 @@ async function handleDownload(req, res) {
   } catch (err) {
     return handleExtractionError(err, res);
   }
+}
+
+/**
+ * Handle extraction logic for /audio
+ * Dedicated convenience endpoint returning audio streams & conversion links.
+ */
+async function handleAudio(req, res) {
+  req.query.filter = 'audio';
+  req.query.type = 'audio';
+  return handleDownload(req, res);
 }
 
 /**
@@ -147,6 +172,13 @@ router.post('/info', handleInfo);
  */
 router.get('/download', handleDownload);
 router.post('/download', handleDownload);
+
+/**
+ * GET & POST /api/audio
+ * Direct audio extraction endpoint.
+ */
+router.get('/audio', handleAudio);
+router.post('/audio', handleAudio);
 
 /**
  * POST /api/batch
@@ -165,6 +197,9 @@ router.post('/batch', async (req, res) => {
   const maxBatch = 10;
   const targetUrls = urls.slice(0, maxBatch);
   const startTime = Date.now();
+  const filter = (req.body.filter || req.body.type || 'all').toLowerCase();
+  const hasAudio = req.body.hasAudio;
+  const quality = req.body.quality || null;
 
   const results = await Promise.all(
     targetUrls.map(async (rawUrl) => {
@@ -174,7 +209,7 @@ router.post('/batch', async (req, res) => {
           return { url: rawUrl, success: false, error: safeCheck.error };
         }
 
-        const cacheKey = rawUrl.trim().toLowerCase();
+        const cacheKey = `download:${rawUrl.trim().toLowerCase()}:f=${filter}:a=${hasAudio}:q=${quality}`;
         const cached = cache.get(cacheKey);
         if (cached) {
           stats.trackRequest(cached.platform);
@@ -182,7 +217,7 @@ router.post('/batch', async (req, res) => {
           return { url: rawUrl, success: true, cached: true, data: cached };
         }
 
-        const data = await queue.run(() => extractVideo(rawUrl));
+        const data = await queue.run(() => extractVideo(rawUrl, { filter, hasAudio, quality }));
         cache.set(cacheKey, data);
         stats.trackRequest(data.platform);
         stats.trackCacheMiss();
@@ -210,24 +245,49 @@ router.post('/batch', async (req, res) => {
 });
 
 /**
- * GET /api/stream
- * Stream or proxy media directly to client browser with Range header support.
- * Solves CORS and hotlinking blocks on Instagram, TikTok, Twitter/X, and YouTube CDN URLs.
+ * GET & POST /api/stream
+ *
+ * Versatile streaming proxy:
+ * 1. Stream direct CDN media URL bypassing CORS and hotlinking (with Range support & redirect following).
+ * 2. On-the-fly Video+Audio merge (`merge=true` or page URL).
+ * 3. On-the-fly Audio extraction (`type=audio` or `format=mp3`).
+ * 4. Merging separate video and audio URLs via FFmpeg (`videoUrl` + `audioUrl`).
  */
-router.get('/stream', async (req, res) => {
-  const mediaUrl = req.query.url;
-  const rawFilename = (req.query.filename || 'video.mp4').trim();
-  // Sanitize filename to prevent header injection
-  const safeFilename = rawFilename.replace(/[^a-zA-Z0-9._-]/g, '_');
+async function handleStream(req, res) {
+  const mediaUrl = (req.query && req.query.url) || (req.body && req.body.url) || null;
+  const videoUrl = (req.query && req.query.videoUrl) || (req.body && req.body.videoUrl) || null;
+  const audioUrl = (req.query && req.query.audioUrl) || (req.body && req.body.audioUrl) || null;
 
+  const filename = (req.query && req.query.filename) || (req.body && req.body.filename) || null;
+  const type = (req.query && req.query.type) || (req.body && req.body.type) || null;
+  const format = (req.query && req.query.format) || (req.body && req.body.format) || null;
+  const quality = (req.query && req.query.quality) || (req.body && req.body.quality) || null;
+  const shouldMerge = (req.query && req.query.merge === 'true') || (req.body && req.body.merge === true);
+
+  // Case 1: Separate video and audio streams to merge directly via FFmpeg
+  if (videoUrl && audioUrl) {
+    const vCheck = await validateSafeUrl(videoUrl);
+    const aCheck = await validateSafeUrl(audioUrl);
+    if (!vCheck.ok || !aCheck.ok) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'INVALID_MEDIA_URL',
+        error: vCheck.error || aCheck.error,
+      });
+    }
+    return streamDirectFfmpegMerge(videoUrl, audioUrl, res, { filename: filename || 'merged.mp4' });
+  }
+
+  // If no URL provided at all
   if (!mediaUrl) {
     return res.status(400).json({
       success: false,
       errorCode: 'MISSING_MEDIA_URL',
-      error: 'Missing media stream URL. Pass ?url=<cdn_media_url>',
+      error: 'Missing media stream URL. Pass ?url=<cdn_media_url_or_video_url>',
     });
   }
 
+  // SSRF check on target URL
   const safeCheck = await validateSafeUrl(mediaUrl);
   if (!safeCheck.ok) {
     return res.status(400).json({
@@ -237,82 +297,27 @@ router.get('/stream', async (req, res) => {
     });
   }
 
-  let parsed;
-  try {
-    parsed = new URL(mediaUrl);
-  } catch {
-    return res.status(400).json({ success: false, error: 'Invalid media URL.' });
+  const detectedPlatform = detectPlatform(mediaUrl);
+  const isPageUrl = detectedPlatform !== null && !mediaUrl.includes('googlevideo.com') && !mediaUrl.includes('fbcdn.net') && !mediaUrl.includes('cdninstagram.com');
+
+  // Case 2: Pure audio streaming requested
+  if (type === 'audio' || format === 'mp3' || format === 'm4a') {
+    if (isPageUrl) {
+      return streamAudioMedia(mediaUrl, res, { format: format || 'mp3', filename });
+    }
   }
 
-  const client = parsed.protocol === 'https:' ? https : http;
-  const outgoingHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    Accept: '*/*',
-  };
-
-  if (parsed.hostname.includes('instagram.com') || parsed.hostname.includes('cdninstagram.com')) {
-    outgoingHeaders['Referer'] = 'https://www.instagram.com/';
+  // Case 3: Live merging requested or target is a platform page URL
+  if (shouldMerge || (isPageUrl && !type)) {
+    return streamMergedMedia(mediaUrl, res, { quality, filename });
   }
 
-  // Forward Range header if client browser requested it (supports video seeking)
-  if (req.headers.range) {
-    outgoingHeaders['Range'] = req.headers.range;
-  }
+  // Case 4: Standard direct media proxy with redirect-following and Range support
+  return proxyMediaStream(mediaUrl, req, res, { filename });
+}
 
-  const streamReq = client.request(
-    mediaUrl,
-    {
-      method: 'GET',
-      headers: outgoingHeaders,
-      timeout: 30_000,
-    },
-    (streamRes) => {
-      // Forward status (200 OK or 206 Partial Content)
-      res.status(streamRes.statusCode);
-
-      // Forward relevant headers
-      const headersToForward = [
-        'content-type',
-        'content-length',
-        'content-range',
-        'accept-ranges',
-        'last-modified',
-        'etag',
-      ];
-      for (const h of headersToForward) {
-        if (streamRes.headers[h]) {
-          res.setHeader(h, streamRes.headers[h]);
-        }
-      }
-
-      // Force attachment download filename
-      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-
-      streamRes.pipe(res);
-      streamRes.on('error', (err) => {
-        if (!res.headersSent) {
-          res.status(502).json({ success: false, error: 'Upstream stream error' });
-        }
-      });
-    }
-  );
-
-  streamReq.on('error', (err) => {
-    if (!res.headersSent) {
-      res.status(502).json({ success: false, error: 'Failed to connect to media host' });
-    }
-  });
-
-  streamReq.on('timeout', () => {
-    streamReq.destroy();
-    if (!res.headersSent) {
-      res.status(504).json({ success: false, error: 'Media stream connection timed out' });
-    }
-  });
-
-  streamReq.end();
-});
+router.get('/stream', handleStream);
+router.post('/stream', handleStream);
 
 /**
  * GET & POST /api/check

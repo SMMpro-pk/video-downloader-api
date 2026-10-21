@@ -316,11 +316,28 @@ function renderDashboard({ pkg, status, cacheInfo, queueInfo, boot, uptime }) {
       color: #fff;
     }
     .badge-audio {
-      background: rgba(16, 185, 129, 0.15);
+      background: rgba(16, 185, 129, 0.2);
       color: #34d399;
       font-size: 10px;
-      padding: 1px 5px;
+      padding: 2px 6px;
       border-radius: 4px;
+      font-weight: 600;
+    }
+    .badge-muted {
+      background: rgba(156, 163, 175, 0.18);
+      color: #9ca3af;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    .badge-merged {
+      background: rgba(99, 102, 241, 0.25);
+      color: #a5b4fc;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
     }
 
     /* Cards */
@@ -532,9 +549,14 @@ function renderDashboard({ pkg, status, cacheInfo, queueInfo, boot, uptime }) {
         <span class="api-desc">Full video & audio extraction + download streams</span>
       </div>
       <div class="api-item">
+        <span class="method-get">GET</span>
+        <a class="api-path" href="/api/audio?url=https://youtu.be/dQw4w9WgXcQ" target="_blank">/api/audio?url=...</a>
+        <span class="api-desc">Direct audio extraction (MP3 / M4A streams)</span>
+      </div>
+      <div class="api-item">
         <span class="method-post">POST</span>
         <span class="api-path">/api/download</span>
-        <span class="api-desc">Extract with JSON body {"url": "..."}</span>
+        <span class="api-desc">Extract with JSON body {"url": "...", "hasAudio": true}</span>
       </div>
       <div class="api-item">
         <span class="method-post">POST</span>
@@ -621,12 +643,25 @@ function renderDashboard({ pkg, status, cacheInfo, queueInfo, boot, uptime }) {
           data.downloads.forEach(d => {
             const a = document.createElement('a');
             a.className = 'format-btn';
-            a.href = d.url;
+            a.href = d.streamUrl || d.url;
             a.target = '_blank';
             a.rel = 'noreferrer';
             const sizeStr = d.filesizeFormatted ? ' (' + d.filesizeFormatted + ')' : '';
-            a.innerHTML = '<strong>' + (d.quality || 'Video') + '</strong> ' + (d.format ? d.format.toUpperCase() : '') + sizeStr + (d.hasAudio ? ' <span class="badge-audio">Audio+Video</span>' : '');
+            const audioBadge = d.hasAudio
+              ? ' <span class="badge-audio">Audio+Video</span>'
+              : ' <span class="badge-muted">Video Only</span>';
+            a.innerHTML = '<strong>' + (d.quality || 'Video') + '</strong> ' + (d.format ? d.format.toUpperCase() : '') + sizeStr + audioBadge;
             formatsDiv.appendChild(a);
+
+            if (!d.hasAudio && d.mergedStreamUrl) {
+              const mergeBtn = document.createElement('a');
+              mergeBtn.className = 'format-btn';
+              mergeBtn.href = d.mergedStreamUrl;
+              mergeBtn.target = '_blank';
+              mergeBtn.rel = 'noreferrer';
+              mergeBtn.innerHTML = '⚡ <strong>' + (d.quality || 'HD') + '</strong> <span class="badge-merged">Stream+Audio</span>';
+              formatsDiv.appendChild(mergeBtn);
+            }
           });
         } else {
           formatsDiv.innerHTML = '<span style="color:#888;font-size:12px">No direct video streams parsed</span>';
@@ -638,11 +673,11 @@ function renderDashboard({ pkg, status, cacheInfo, queueInfo, boot, uptime }) {
           data.audioDownloads.forEach(aItem => {
             const a = document.createElement('a');
             a.className = 'format-btn';
-            a.href = aItem.url;
+            a.href = aItem.streamUrl || aItem.url;
             a.target = '_blank';
             a.rel = 'noreferrer';
             const sizeStr = aItem.filesizeFormatted ? ' (' + aItem.filesizeFormatted + ')' : '';
-            a.innerHTML = '🎵 ' + (aItem.quality || 'Audio') + ' ' + (aItem.format ? aItem.format.toUpperCase() : 'M4A') + sizeStr;
+            a.innerHTML = '🎵 <strong>' + (aItem.quality || 'Audio') + '</strong> ' + (aItem.format ? aItem.format.toUpperCase() : 'MP3') + sizeStr;
             audioDiv.appendChild(a);
           });
         }

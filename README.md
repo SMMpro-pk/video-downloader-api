@@ -47,6 +47,7 @@ curl https://your-app.vercel.app/api/deploy-info
 - [Generic URL Shorteners (Auto-Resolved)](#generic-url-shorteners-auto-resolved)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
+- [Developer Integration Guide (Full Guide →)](./INTEGRATION_GUIDE.md)
 - [API Authentication](#api-authentication)
 - [API Endpoints](#api-endpoints)
 - [cURL Examples](#curl-examples)
@@ -418,67 +419,149 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/info?url=https://youtu.
 
 ---
 
-### 2. `GET /api/download?url=<video_url>` — Full Download
+### 2. `GET /api/download?url=<video_url>` — Full Video & Audio Download
 
-Full extraction — metadata + download URLs. Returns the **best N formats** (configurable via `MAX_FORMATS`, default 10). Automatically resolves short URLs and strips tracking parameters.
+Full extraction returning complete metadata and download options. Supports resolution separation (muxed audio+video vs. high-res video-only DASH tracks), audio extraction, and streaming proxy links with CORS bypass.
+
+#### Query Parameters / JSON Body:
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `url` | String | *Required* | Target video or post URL |
+| `filter` | String | `'all'` | Format category: `'all'`, `'muxed'` (video+audio), `'audio'`, or `'video'` |
+| `hasAudio` | Boolean | `false` | When `true`, filters downloads to strictly include only formats with audio |
+| `quality` | String | `null` | Target resolution (e.g. `'1080p'`, `'720p'`, `'480p'`, `'best'`) |
+| `type` | String | `null` | Convenience shortcut: `'audio'` or `'video'` |
 
 ```bash
+# Basic download
 curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/download?url=https://vm.tiktok.com/ZMxxxxxx/"
+
+# Only formats guaranteed to have audio
+curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/download?url=https://youtu.be/dQw4w9WgXcQ&hasAudio=true"
 ```
 
-**Response:**
+**Response Structure:**
 
 ```json
 {
   "success": true,
   "cached": false,
-  "processingTime": "2340ms",
-  "originalUrl": "https://vm.tiktok.com/ZMxxxxxx/",
-  "resolvedUrl": "https://www.tiktok.com/@user/video/123456",
+  "processingTime": "1850ms",
+  "originalUrl": "https://youtu.be/dQw4w9WgXcQ",
+  "resolvedUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
   "wasRedirected": true,
-  "platform": "tiktok",
-  "platformDescription": "TikTok Videos & Slideshows",
-  "title": "Amazing Video",
-  "thumbnail": "https://...jpg",
-  "duration": 120,
-  "durationFormatted": "2:00",
-  "uploader": "user",
-  "uploadDate": "20240115",
-  "viewCount": 15000,
-  "likeCount": 500,
+  "platform": "youtube",
+  "platformDescription": "YouTube & YouTube Music",
+  "title": "Rick Astley - Never Gonna Give You Up (Official Music Video)",
+  "thumbnail": "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
+  "duration": 213,
+  "durationFormatted": "3:33",
+  "uploader": "Rick Astley",
+  "uploadDate": "20091024",
+  "viewCount": 1600000000,
+  "likeCount": 17000000,
   "isShortVideo": false,
   "isAudioOnly": false,
   "isLiveStream": false,
   "bestQuality": "1080p",
-  "qualities": ["1080p", "720p", "480p", "360p"],
+  "bestMuxedQuality": "720p",
+  "hasMuxedFormats": true,
+  "bestVideoWithAudio": {
+    "quality": "720p",
+    "format": "mp4",
+    "filesize": 35200000,
+    "filesizeFormatted": "33.57 MB",
+    "hasAudio": true,
+    "isMuxed": true,
+    "url": "https://rr---googlevideo.com/...",
+    "streamUrl": "/api/stream?url=https%3A%2F%2Frr---googlevideo.com%2F...&filename=Rick_Astley_720p.mp4"
+  },
+  "mergedDownloadUrl": "/api/stream?url=https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ&merge=true&quality=best&filename=Rick_Astley.mp4",
+  "audioDownloadUrl": "/api/stream?url=https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ&type=audio&filename=Rick_Astley.mp3",
+  "qualities": ["1080p", "720p", "480p", "360p", "240p", "144p"],
   "downloads": [
     {
       "quality": "1080p",
       "format": "mp4",
-      "filesize": 52428800,
+      "ext": "mp4",
+      "filesize": 62914560,
+      "filesizeFormatted": "60.00 MB",
+      "hasAudio": false,
+      "isMuxed": false,
+      "videoOnly": true,
+      "audioOnly": false,
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "formatId": "137",
+      "vcodec": "avc1.640028",
+      "acodec": null,
+      "url": "https://rr---googlevideo.com/...",
+      "streamUrl": "/api/stream?url=https%3A%2F%2Frr---googlevideo.com%2F...&filename=Rick_Astley_1080p.mp4",
+      "mergedStreamUrl": "/api/stream?url=https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ&merge=true&quality=1080&filename=Rick_Astley_1080p.mp4"
+    },
+    {
+      "quality": "720p",
+      "format": "mp4",
+      "ext": "mp4",
+      "filesize": 35200000,
+      "filesizeFormatted": "33.57 MB",
       "hasAudio": true,
-      "url": "https://...mp4"
+      "isMuxed": true,
+      "videoOnly": false,
+      "audioOnly": false,
+      "width": 1280,
+      "height": 720,
+      "fps": 30,
+      "formatId": "22",
+      "vcodec": "avc1.64001f",
+      "acodec": "mp4a.40.2",
+      "url": "https://rr---googlevideo.com/...",
+      "streamUrl": "/api/stream?url=https%3A%2F%2Frr---googlevideo.com%2F...&filename=Rick_Astley_720p.mp4",
+      "mergedStreamUrl": null
     }
+  ],
+  "muxedDownloads": [
+    { "quality": "720p", "format": "mp4", "hasAudio": true, "isMuxed": true, "url": "..." }
+  ],
+  "videoOnlyDownloads": [
+    { "quality": "1080p", "format": "mp4", "hasAudio": false, "videoOnly": true, "url": "..." }
   ],
   "audioDownloads": [
     {
-      "quality": "128kbps",
-      "format": "m4a",
-      "filesize": 1048576,
-      "url": "https://...m4a"
+      "quality": "Audio (MP3)",
+      "format": "mp3",
+      "ext": "mp3",
+      "abr": 128,
+      "url": "https://...",
+      "streamUrl": "/api/stream?url=https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ&type=audio&filename=Rick_Astley.mp3"
     }
-  ]
+  ],
+  "subtitles": [],
+  "chapters": []
 }
 ```
 
-> **Tip:** You can also call both `/api/download` and `/api/info` via `POST` with JSON body:
+> **Tip:** You can also call `/api/download`, `/api/info`, and `/api/audio` via `POST` with a JSON body:
 > ```bash
-> curl -X POST -H "Content-Type: application/json" -d '{"url":"https://youtu.be/dQw4w9WgXcQ"}' http://localhost:3000/api/download
+> curl -X POST -H "Content-Type: application/json" -H "x-api-key: YOUR_KEY" \
+>   -d '{"url":"https://youtu.be/dQw4w9WgXcQ", "hasAudio": true}' \
+>   http://localhost:3000/api/download
 > ```
 
 ---
 
-### 3. `POST /api/batch` — Batch Video Extraction
+### 3. `GET /api/audio?url=<video_url>` — Dedicated Audio Extraction
+
+Extract pure audio from any platform (YouTube, TikTok, Instagram, Twitter, etc.). Guaranteed to return audio stream links and conversion proxy URLs even on platforms that only host muxed video files.
+
+```bash
+curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/audio?url=https://youtu.be/dQw4w9WgXcQ"
+```
+
+---
+
+### 4. `POST /api/batch` — Batch Video Extraction
 
 Extract multiple videos simultaneously in a single call (up to 10 URLs). Requests run through the concurrency queue to prevent server overloading.
 
@@ -506,20 +589,33 @@ curl -X POST http://localhost:3000/api/batch \
 
 ---
 
-### 4. `GET /api/stream?url=<media_url>&filename=video.mp4` — Direct Streaming Proxy
+### 5. `GET /api/stream` — High-Performance Streaming & Live Merging Proxy
 
-Solves CORS restrictions, IP expiration, and hotlink referer checks on TikTok, Instagram, Twitter/X, and YouTube CDN streams. Proxies media directly to the client browser with `Range` header support (seeking & resume) and forces an attachment download.
+Solves CORS restrictions, IP expiration, hotlink referer checks, and DASH audio separation.
+Supports 4 modes:
 
-```bash
-# Direct in-browser download
-<a href="/api/stream?url=https%3A%2F%2Fcdn.example.com%2Fvideo.mp4&filename=my_video.mp4">Download MP4</a>
+1. **Direct CDN Proxying (with auto-redirects & Range seeking):**
+   `GET /api/stream?url=<cdn_url>&filename=video.mp4`
+2. **On-the-Fly Audio Extraction:**
+   `GET /api/stream?url=<page_or_media_url>&type=audio&filename=audio.mp3`
+3. **On-the-Fly 1080p/4K Merging with Audio:**
+   `GET /api/stream?url=https://www.youtube.com/watch?v=...&merge=true&quality=1080&filename=video.mp4`
+4. **Direct FFmpeg Stream Merging:**
+   `GET /api/stream?videoUrl=<video_url>&audioUrl=<audio_url>&filename=merged.mp4`
+
+```html
+<!-- Stream video directly in HTML5 player with seek/pause support -->
+<video controls src="/api/stream?url=https%3A%2F%2F...&filename=video.mp4"></video>
+
+<!-- Direct MP3 download from any video link -->
+<a href="/api/stream?url=https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ&type=audio&filename=song.mp3">Download MP3</a>
 ```
 
 ---
 
-### 5. `GET /api/check?url=<video_url>` — Check URL Platform
+### 6. `GET /api/check?url=<video_url>` — Check URL Platform
 
-Quickly check which platform a URL belongs to. Resolves short URLs before detection.
+Quickly check which platform a URL belongs to. Resolves short URLs before detection without performing heavy extraction.
 
 ```bash
 curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.tiktok.com/ZMxxxxxx/"
@@ -539,7 +635,7 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 6. `GET /api/platforms` — List Supported Platforms
+### 7. `GET /api/platforms` — List Supported Platforms
 
 ```json
 {
@@ -558,7 +654,7 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 7. `GET /api/health` — Health Check (Public, No Key Required)
+### 8. `GET /api/health` — Health Check (Public, No Key Required)
 
 ```json
 {
@@ -573,7 +669,7 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 8. `GET /api/stats` — Daily Usage Statistics
+### 9. `GET /api/stats` — Daily Usage Statistics
 
 ```json
 {
@@ -592,7 +688,37 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 9. `GET /api/version` — Version & Runtime Info (Public, No Key Required)
+### 10. `GET /api/deploy-info` — Deployment & Connection Info (Public)
+
+Returns your active live URL, hosting environment, API authentication status, and active API key (masked in production):
+
+```json
+{
+  "success": true,
+  "name": "smmpro-video-downloader-api",
+  "version": "3.2.0",
+  "platform": "koyeb",
+  "environment": "production",
+  "liveUrl": "https://video-downloader-api-example.koyeb.app",
+  "apiAuthEnabled": true,
+  "apiKey": "7b83d1c9...2a4f",
+  "endpoints": {
+    "health": "https://video-downloader-api-example.koyeb.app/api/health",
+    "version": "https://video-downloader-api-example.koyeb.app/api/version",
+    "info": "https://video-downloader-api-example.koyeb.app/api/info?url=<video_url>",
+    "download": "https://video-downloader-api-example.koyeb.app/api/download?url=<video_url>",
+    "audio": "https://video-downloader-api-example.koyeb.app/api/audio?url=<video_url>",
+    "batch": "https://video-downloader-api-example.koyeb.app/api/batch",
+    "stream": "https://video-downloader-api-example.koyeb.app/api/stream?url=<media_url>&filename=video.mp4",
+    "platforms": "https://video-downloader-api-example.koyeb.app/api/platforms",
+    "stats": "https://video-downloader-api-example.koyeb.app/api/stats"
+  }
+}
+```
+
+---
+
+### 11. `GET /api/version` — Version & Runtime Info (Public, No Key Required)
 
 ```json
 {
@@ -607,7 +733,7 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 10. `GET /api/cache` — Cache Statistics
+### 12. `GET /api/cache` — Cache Statistics
 
 ```json
 {
@@ -622,7 +748,7 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/check?url=https://vm.ti
 
 ---
 
-### 11. `DELETE /api/cache` — Clear Cache
+### 13. `DELETE /api/cache` — Clear Cache
 
 ```json
 {
@@ -717,6 +843,25 @@ curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/download?url=https://bi
 # ── Quick preview (info only — no download URLs) ──
 curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/info?url=https://youtu.be/dQw4w9WgXcQ"
 
+# ── Audio extraction (MP3 / M4A) ──
+curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/audio?url=https://youtu.be/dQw4w9WgXcQ"
+
+# ── Filter only formats with audio (no silent DASH streams) ──
+curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/download?url=https://youtu.be/dQw4w9WgXcQ&hasAudio=true"
+
+# ── Batch extraction (up to 10 URLs in parallel) ──
+curl -X POST http://localhost:3000/api/batch \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_KEY" \
+  -d '{"urls": ["https://youtu.be/dQw4w9WgXcQ", "https://vm.tiktok.com/ZM8abc/"]}'
+
+# ── On-the-fly streaming download / merging proxy ──
+# 1. Download merged 1080p MP4 with audio
+curl -O -J "http://localhost:3000/api/stream?url=https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ&merge=true&quality=1080&filename=rick.mp4"
+
+# 2. Download direct extracted MP3 audio stream
+curl -O -J "http://localhost:3000/api/stream?url=https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ&type=audio&filename=rick.mp3"
+
 # ── Cache management ──
 curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/cache"
 curl -H "x-api-key: YOUR_KEY" -X DELETE "http://localhost:3000/api/cache"
@@ -724,6 +869,7 @@ curl -H "x-api-key: YOUR_KEY" -X DELETE "http://localhost:3000/api/cache"
 # ── Public endpoints (no key needed) ──
 curl "http://localhost:3000/api/health"
 curl "http://localhost:3000/api/version"
+curl "http://localhost:3000/api/deploy-info"
 
 # ── Stats (key needed) ──
 curl -H "x-api-key: YOUR_KEY" "http://localhost:3000/api/stats"

@@ -263,6 +263,20 @@ describe('HTTP API Endpoints Integration', () => {
     const data = await res.json();
     assert.equal(data.errorCode, 'INVALID_MEDIA_URL');
   });
+
+  test('GET /api/audio rejects missing URL parameter', async () => {
+    const res = await fetch(`${baseUrl}/api/audio`);
+    assert.equal(res.status, 400);
+    const data = await res.json();
+    assert.equal(data.errorCode, 'MISSING_URL');
+  });
+
+  test('GET /api/stream rejects SSRF in merged videoUrl/audioUrl pair', async () => {
+    const res = await fetch(`${baseUrl}/api/stream?videoUrl=http://127.0.0.1:9000/v.mp4&audioUrl=https://example.com/a.m4a`);
+    assert.equal(res.status, 400);
+    const data = await res.json();
+    assert.equal(data.errorCode, 'INVALID_MEDIA_URL');
+  });
 });
 
 describe('Instagram & Error Handling', () => {
@@ -298,6 +312,30 @@ describe('Instagram & Error Handling', () => {
     assert.equal(typeof rootApp, 'function');
     assert.equal(typeof rootApp.use, 'function');
     assert.equal(typeof rootApp.get, 'function');
+  });
+});
+
+describe('Audio Handling & Stream Enhancements', () => {
+  const { sanitizeFilename, getPlatformHeaders } = require('../utils/streamHelper');
+
+  test('sanitizeFilename removes path traversal and illegal header characters', () => {
+    assert.equal(sanitizeFilename('../../etc/passwd.mp4'), '.._.._etc_passwd.mp4');
+    assert.equal(sanitizeFilename('Rick:Astley*Never"Gonna?Give.mp4'), 'Rick_Astley_Never_Gonna_Give.mp4');
+    assert.equal(sanitizeFilename(null, 'fallback.mp4'), 'fallback.mp4');
+  });
+
+  test('getPlatformHeaders attaches appropriate Referer for CDNs', () => {
+    const igHeaders = getPlatformHeaders('https://scontent.cdninstagram.com/v/t50.2886-16/123.mp4');
+    assert.equal(igHeaders['Referer'], 'https://www.instagram.com/');
+
+    const ttHeaders = getPlatformHeaders('https://v16-webapp-prime.tiktokcdn.com/video/tos/useast2a/');
+    assert.equal(ttHeaders['Referer'], 'https://www.tiktok.com/');
+
+    const ytHeaders = getPlatformHeaders('https://rr1---sn-4g5ednkk.googlevideo.com/videoplayback');
+    assert.equal(ytHeaders['Referer'], 'https://www.youtube.com/');
+
+    const twHeaders = getPlatformHeaders('https://video.twimg.com/ext_tw_video/123/pu/vid/720x1280/xyz.mp4');
+    assert.equal(twHeaders['Referer'], 'https://twitter.com/');
   });
 });
 

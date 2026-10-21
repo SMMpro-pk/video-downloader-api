@@ -99,7 +99,7 @@ const PUBLIC_PATHS = [
   '/health', '/version', '/deploy-info',
 ];
 
-app.use(['/api', '/download', '/info', '/batch', '/stream', '/check', '/platforms', '/stats', '/cache'], (req, res, next) => {
+app.use(['/api', '/download', '/audio', '/info', '/batch', '/stream', '/check', '/platforms', '/stats', '/cache'], (req, res, next) => {
   // Skip auth only if key is truly disabled or empty
   if (!API_SECRET_KEY) return next();
 
@@ -184,6 +184,7 @@ const handleDeployInfo = (req, res) => {
       version: `${liveUrl}/api/version`,
       info: `${liveUrl}/api/info?url=<video_url>`,
       download: `${liveUrl}/api/download?url=<video_url>`,
+      audio: `${liveUrl}/api/audio?url=<video_url>`,
       batch: `${liveUrl}/api/batch`,
       stream: `${liveUrl}/api/stream?url=<media_url>&filename=video.mp4`,
       platforms: `${liveUrl}/api/platforms`,

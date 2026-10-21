@@ -5,10 +5,10 @@ const fs = require('fs');
 const path = require('path');
 
 // ─── Configuration ───
-const MAX_VIDEO_DURATION = parseInt(process.env.MAX_VIDEO_DURATION, 10) || 7200;   // seconds
-const MAX_FILE_SIZE_MB   = parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 500;
-const MAX_FILE_SIZE      = MAX_FILE_SIZE_MB * 1024 * 1024;
-const MAX_FORMATS        = parseInt(process.env.MAX_FORMATS, 10) || 10;
+const MAX_VIDEO_DURATION = parseInt(process.env.MAX_VIDEO_DURATION, 10) || 7200; // seconds
+const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 500;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
+const MAX_FORMATS = parseInt(process.env.MAX_FORMATS, 10) || 10;
 const EXTRACTION_TIMEOUT = parseInt(process.env.EXTRACTION_TIMEOUT, 10) || 45000; // 45s default
 
 // ─── Logger ───
@@ -39,7 +39,9 @@ function log(level, message, meta = {}) {
 
 // ─── Environment & yt-dlp Settings ───
 const YTDLP_PROXY = process.env.YTDLP_PROXY || process.env.PROXY_URL || process.env.HTTP_PROXY || null;
-const YTDLP_USER_AGENT = process.env.YTDLP_USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const YTDLP_USER_AGENT =
+  process.env.YTDLP_USER_AGENT ||
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 function resolveCookiesFile() {
   const envFile = process.env.YTDLP_COOKIES_FILE || process.env.COOKIES_PATH;
@@ -64,36 +66,48 @@ function resolveCookiesFile() {
 
 // ─── Detailed error codes ───
 const ERROR_MAP = {
-  'empty media response'    : { code: 'LOGIN_REQUIRED',            message: 'Instagram requires authentication or session cookies to access this video. Add cookies.txt to project root or set YTDLP_COOKIES_FILE.' },
-  'not granting access'     : { code: 'LOGIN_REQUIRED',            message: 'Instagram denied anonymous access. Session cookies or authentication required.' },
-  'cookies-from-browser'    : { code: 'LOGIN_REQUIRED',            message: 'Instagram requires authentication or session cookies to access this content.' },
-  'checkpoint_required'     : { code: 'BOT_VERIFICATION_REQUIRED', message: 'Instagram requested checkpoint verification or login.' },
-  'private'                 : { code: 'VIDEO_PRIVATE',             message: 'This video is private.' },
-  'removed'                 : { code: 'VIDEO_REMOVED',             message: 'This video has been removed.' },
-  'unavailable'             : { code: 'VIDEO_REMOVED',             message: 'This video is unavailable.' },
-  'geo'                     : { code: 'GEO_RESTRICTED',            message: 'This video is geo-restricted in your region.' },
-  'country'                 : { code: 'GEO_RESTRICTED',            message: 'This video is not available in your country.' },
-  'login'                   : { code: 'LOGIN_REQUIRED',            message: 'Login is required to access this video.' },
-  'sign in'                 : { code: 'LOGIN_REQUIRED',            message: 'Login is required to access this video.' },
-  'authentication'          : { code: 'LOGIN_REQUIRED',            message: 'Login is required to access this video.' },
-  'bot'                     : { code: 'BOT_VERIFICATION_REQUIRED', message: 'Platform requested bot verification / captcha.' },
+  'empty media response': {
+    code: 'LOGIN_REQUIRED',
+    message: 'Instagram requires authentication or session cookies to access this video. Add cookies.txt to project root or set YTDLP_COOKIES_FILE.',
+  },
+  'not granting access': {
+    code: 'LOGIN_REQUIRED',
+    message: 'Instagram denied anonymous access. Session cookies or authentication required.',
+  },
+  'cookies-from-browser': {
+    code: 'LOGIN_REQUIRED',
+    message: 'Instagram requires authentication or session cookies to access this content.',
+  },
+  checkpoint_required: {
+    code: 'BOT_VERIFICATION_REQUIRED',
+    message: 'Instagram requested checkpoint verification or login.',
+  },
+  private: { code: 'VIDEO_PRIVATE', message: 'This video is private.' },
+  removed: { code: 'VIDEO_REMOVED', message: 'This video has been removed.' },
+  unavailable: { code: 'VIDEO_REMOVED', message: 'This video is unavailable.' },
+  geo: { code: 'GEO_RESTRICTED', message: 'This video is geo-restricted in your region.' },
+  country: { code: 'GEO_RESTRICTED', message: 'This video is not available in your country.' },
+  login: { code: 'LOGIN_REQUIRED', message: 'Login is required to access this video.' },
+  'sign in': { code: 'LOGIN_REQUIRED', message: 'Login is required to access this video.' },
+  authentication: { code: 'LOGIN_REQUIRED', message: 'Login is required to access this video.' },
+  bot: { code: 'BOT_VERIFICATION_REQUIRED', message: 'Platform requested bot verification / captcha.' },
   'confirm you’re not a bot': { code: 'BOT_VERIFICATION_REQUIRED', message: 'Sign in or bot verification is required.' },
-  'confirm you are not a bot':{ code: 'BOT_VERIFICATION_REQUIRED', message: 'Sign in or bot verification is required.' },
-  'po-token'                : { code: 'BOT_VERIFICATION_REQUIRED', message: 'Platform requires Proof of Origin token or session cookies.' },
-  'n-sig'                   : { code: 'EXTRACTION_FAILED',         message: 'Platform anti-bot signature extraction failed. yt-dlp update required.' },
-  'members-only'            : { code: 'MEMBERS_ONLY',              message: 'This video is reserved for channel members only.' },
-  'copyright'               : { code: 'COPYRIGHT_TAKEDOWN',        message: 'This video has been taken down due to a copyright claim.' },
-  'age'                     : { code: 'AGE_RESTRICTED',            message: 'This video is age-restricted and requires account verification.' },
-  'premieres'               : { code: 'LIVE_PREMIERE_NOT_STARTED', message: 'This is a live premiere that has not started yet.' },
-  'rate limit'              : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
-  'too many requests'       : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
-  '429'                     : { code: 'RATE_LIMITED_BY_PLATFORM',  message: 'The platform is rate-limiting requests. Try again later.' },
-  'timed out'               : { code: 'EXTRACTION_TIMEOUT',        message: 'Extraction timed out. Upstream platform took too long to respond.' },
-  'timeout'                 : { code: 'EXTRACTION_TIMEOUT',        message: 'Extraction timed out. Upstream platform took too long to respond.' },
-  'blocked'                 : { code: 'IP_BLOCKED',                message: 'Your IP or datacenter is blocked by the platform.' },
-  'not supported'           : { code: 'PLATFORM_UNSUPPORTED',      message: 'This platform or URL type is not supported.' },
-  'unsupported url'         : { code: 'PLATFORM_UNSUPPORTED',      message: 'This platform or URL type is not supported.' },
-  'no video'                : { code: 'EXTRACTION_FAILED',         message: 'No video found at this URL.' },
+  'confirm you are not a bot': { code: 'BOT_VERIFICATION_REQUIRED', message: 'Sign in or bot verification is required.' },
+  'po-token': { code: 'BOT_VERIFICATION_REQUIRED', message: 'Platform requires Proof of Origin token or session cookies.' },
+  'n-sig': { code: 'EXTRACTION_FAILED', message: 'Platform anti-bot signature extraction failed. yt-dlp update required.' },
+  'members-only': { code: 'MEMBERS_ONLY', message: 'This video is reserved for channel members only.' },
+  copyright: { code: 'COPYRIGHT_TAKEDOWN', message: 'This video has been taken down due to a copyright claim.' },
+  age: { code: 'AGE_RESTRICTED', message: 'This video is age-restricted and requires account verification.' },
+  premieres: { code: 'LIVE_PREMIERE_NOT_STARTED', message: 'This is a live premiere that has not started yet.' },
+  'rate limit': { code: 'RATE_LIMITED_BY_PLATFORM', message: 'The platform is rate-limiting requests. Try again later.' },
+  'too many requests': { code: 'RATE_LIMITED_BY_PLATFORM', message: 'The platform is rate-limiting requests. Try again later.' },
+  429: { code: 'RATE_LIMITED_BY_PLATFORM', message: 'The platform is rate-limiting requests. Try again later.' },
+  'timed out': { code: 'EXTRACTION_TIMEOUT', message: 'Extraction timed out. Upstream platform took too long to respond.' },
+  timeout: { code: 'EXTRACTION_TIMEOUT', message: 'Extraction timed out. Upstream platform took too long to respond.' },
+  blocked: { code: 'IP_BLOCKED', message: 'Your IP or datacenter is blocked by the platform.' },
+  'not supported': { code: 'PLATFORM_UNSUPPORTED', message: 'This platform or URL type is not supported.' },
+  'unsupported url': { code: 'PLATFORM_UNSUPPORTED', message: 'This platform or URL type is not supported.' },
+  'no video': { code: 'EXTRACTION_FAILED', message: 'No video found at this URL.' },
 };
 
 function classifyError(stderr) {
@@ -107,22 +121,25 @@ function classifyError(stderr) {
 
 // ─── Platform-specific yt-dlp overrides ───
 const PLATFORM_OPTIONS = {
-  youtube:     { addHeader: ['referer:https://www.youtube.com'] },
-  facebook:    { addHeader: ['referer:https://www.facebook.com'] },
-  instagram:   { addHeader: ['referer:https://www.instagram.com/', 'accept-language:en-US,en;q=0.9'] },
-  tiktok:      { addHeader: ['referer:https://www.tiktok.com'] },
-  twitter:     { addHeader: ['referer:https://twitter.com'] },
-  reddit:      { addHeader: ['referer:https://www.reddit.com'] },
-  vimeo:       { addHeader: ['referer:https://vimeo.com'] },
-  linkedin:    { addHeader: ['referer:https://www.linkedin.com'] },
-  pinterest:   { addHeader: ['referer:https://www.pinterest.com'] },
+  youtube: {
+    addHeader: ['referer:https://www.youtube.com'],
+    extractorArgs: 'youtube:player_client=all',
+  },
+  facebook: { addHeader: ['referer:https://www.facebook.com'] },
+  instagram: { addHeader: ['referer:https://www.instagram.com/', 'accept-language:en-US,en;q=0.9'] },
+  tiktok: { addHeader: ['referer:https://www.tiktok.com'] },
+  twitter: { addHeader: ['referer:https://twitter.com'] },
+  reddit: { addHeader: ['referer:https://www.reddit.com'] },
+  vimeo: { addHeader: ['referer:https://vimeo.com'] },
+  linkedin: { addHeader: ['referer:https://www.linkedin.com'] },
+  pinterest: { addHeader: ['referer:https://www.pinterest.com'] },
   dailymotion: { addHeader: ['referer:https://www.dailymotion.com'] },
-  snapchat:    { addHeader: ['referer:https://www.snapchat.com'] },
-  twitch:      { addHeader: ['referer:https://www.twitch.tv'] },
-  bilibili:    { addHeader: ['referer:https://www.bilibili.com'] },
-  douyin:      { addHeader: ['referer:https://www.douyin.com'] },
-  threads:     { addHeader: ['referer:https://www.threads.net'] },
-  bluesky:     { addHeader: ['referer:https://bsky.app'] },
+  snapchat: { addHeader: ['referer:https://www.snapchat.com'] },
+  twitch: { addHeader: ['referer:https://www.twitch.tv'] },
+  bilibili: { addHeader: ['referer:https://www.bilibili.com'] },
+  douyin: { addHeader: ['referer:https://www.douyin.com'] },
+  threads: { addHeader: ['referer:https://www.threads.net'] },
+  bluesky: { addHeader: ['referer:https://bsky.app'] },
 };
 
 function isValidUrl(str) {
@@ -140,6 +157,14 @@ function formatBytes(bytes) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function runWithTimeout(promise, ms = EXTRACTION_TIMEOUT, message = 'Extraction timed out.') {
@@ -186,10 +211,12 @@ async function runYtdlp(url, options, platformName) {
       // Attempt 3 — only try generic extractor for unknown / 'other' platforms.
       if (platformName === 'other') {
         try {
-          return await runWithTimeout(youtubedl(url, {
-            ...options,
-            forceGenericExtractor: true,
-          }));
+          return await runWithTimeout(
+            youtubedl(url, {
+              ...options,
+              forceGenericExtractor: true,
+            })
+          );
         } catch (err3) {
           log('error', 'All 3 extraction attempts failed', {
             url,
@@ -206,7 +233,6 @@ async function runYtdlp(url, options, platformName) {
         platform: platformName,
         error: err1Stderr,
       });
-      // Attach the native error so classification accurately reflects the platform failure
       err1.primaryStderr = err1Stderr;
       throw err1;
     }
@@ -215,14 +241,24 @@ async function runYtdlp(url, options, platformName) {
 
 /**
  * Extract video metadata + download links from any supported platform.
- * Supports: fallback extraction, detailed error codes, format limiting, size limits.
+ *
+ * Fully addresses audio/video synchronization, DASH formats, and audio extraction:
+ * - Differentiates muxed streams (audio+video), video-only, and audio-only streams.
+ * - Prioritizes formats that have audio to prevent silent video playback in API clients.
+ * - Provides ready-to-use stream proxy URLs (bypassing CORS and hotlink restrictions).
+ * - Provides live merged stream URLs for platforms that only offer separate 1080p/4K DASH streams.
+ * - Extracts and creates audio-only options even for platforms with only muxed streams (TikTok, IG, etc.).
  *
  * @param {string} rawUrl
  * @param {object} [opts]
- * @param {boolean} [opts.infoOnly=false] - If true, skip download URLs (fast /api/info mode).
+ * @param {boolean} [opts.infoOnly=false] - If true, skip full format processing (fast preview).
+ * @param {string}  [opts.filter='all']    - 'all' | 'muxed' | 'audio' | 'video'
+ * @param {boolean} [opts.hasAudio]       - If true, return only formats that have sound.
+ * @param {string}  [opts.quality]        - Target quality preference (e.g., '1080p', '720p', 'best', 'audio').
+ * @param {string}  [opts.type]           - Alias for filter: 'audio' | 'video'
  * @returns {Promise<object>}
  */
-async function extractVideo(rawUrl, { infoOnly = false } = {}) {
+async function extractVideo(rawUrl, { infoOnly = false, filter = 'all', hasAudio = null, quality = null, type = null } = {}) {
   if (!isValidUrl(rawUrl)) {
     const err = new Error('INVALID_URL');
     err.errorCode = 'INVALID_URL';
@@ -240,14 +276,16 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
   const platformDesc = platformInfo ? platformInfo.description : 'Unknown / Other platform (yt-dlp will attempt extraction)';
 
   log('info', `Extraction started (${infoOnly ? 'info-only' : 'full'})`, {
-    originalUrl, resolvedUrl: url, wasRedirected, platform: platformName,
+    originalUrl,
+    resolvedUrl: url,
+    wasRedirected,
+    platform: platformName,
   });
 
   // ─ Build yt-dlp options ─
   const baseOptions = {
     dumpSingleJson: true,
     noWarnings: true,
-    preferFreeFormats: true,
     noPlaylist: true,
     userAgent: YTDLP_USER_AGENT,
   };
@@ -315,12 +353,14 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     : [];
 
   // ─ Frontend-friendly flags ─
-  const isLiveStream = !!(data.is_live);
-  const isShortVideo = !!(duration && duration <= 60);
+  const isLiveStream = Boolean(data.is_live);
+  const isShortVideo = Boolean(duration && duration <= 60);
   const hasVideoFormats = (data.formats || []).some((f) => f.vcodec && f.vcodec !== 'none');
   const isAudioOnly = !hasVideoFormats;
 
-  // ─ Base metadata (shared by /api/info and /api/download) ─
+  // ─ Base metadata ─
+  const safeTitle = (data.title || 'video').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60) || 'video';
+
   const baseMeta = {
     originalUrl,
     resolvedUrl: url,
@@ -342,7 +382,6 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     chaptersCount: chapters.length,
   };
 
-  // ── Info-only mode — return quickly without parsing full download formats ──
   if (infoOnly) {
     log('info', 'Info-only extraction complete', { platform: platformName, title: baseMeta.title });
     return {
@@ -352,7 +391,7 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     };
   }
 
-  // ─ Parse formats ─
+  // ─ Detailed Formats Processing ─
   const formats = data.formats || [];
 
   function getQualityScore(qualityStr, item) {
@@ -362,112 +401,241 @@ async function extractVideo(rawUrl, { infoOnly = false } = {}) {
     return 1;
   }
 
-  // Video downloads — dedupe by quality+format, best first, then limit
-  let videoDownloads = formats
-    .filter((f) => f.url && f.vcodec && f.vcodec !== 'none')
+  // Parse all valid formats with complete metadata
+  const parsedFormats = formats
+    .filter((f) => f && f.url && (f.protocol === 'https' || f.protocol === 'http' || !f.protocol || f.protocol.startsWith('http')))
     .map((f) => {
-      const hasAudio = !!(f.acodec && f.acodec !== 'none');
+      const hasAudioTrack = Boolean(f.acodec && f.acodec !== 'none');
+      const hasVideoTrack = Boolean(f.vcodec && f.vcodec !== 'none');
+      const isMuxed = hasAudioTrack && hasVideoTrack;
+      const videoOnly = hasVideoTrack && !hasAudioTrack;
+      const audioOnly = !hasVideoTrack && hasAudioTrack;
+
       const filesize = f.filesize || f.filesize_approx || null;
+      const qualityLabel = f.height ? `${f.height}p` : f.format_note || 'Standard';
+      const ext = f.ext || (audioOnly ? 'm4a' : 'mp4');
+      const safeFilename = `${safeTitle}_${qualityLabel}.${ext}`;
+      const streamUrl = `/api/stream?url=${encodeURIComponent(f.url)}&filename=${encodeURIComponent(safeFilename)}`;
+      const mergedStreamUrl = videoOnly
+        ? `/api/stream?url=${encodeURIComponent(url)}&quality=${f.height || 'best'}&filename=${encodeURIComponent(`${safeTitle}_${qualityLabel}_audio.mp4`)}`
+        : null;
+
       return {
-        quality: f.height ? `${f.height}p` : f.format_note || 'Standard',
-        format: f.ext || 'mp4',
+        quality: qualityLabel,
+        format: ext,
+        ext,
         filesize,
         filesizeFormatted: formatBytes(filesize),
-        hasAudio,
-        isMuxed: hasAudio,
+        hasAudio: hasAudioTrack,
+        isMuxed,
+        videoOnly,
+        audioOnly,
         width: f.width || null,
         height: f.height || null,
         fps: f.fps || null,
         formatId: f.format_id || null,
-        url: f.url,
-      };
-    })
-    .filter((item, idx, self) =>
-      idx === self.findIndex((t) => t.quality === item.quality && t.format === item.format && t.hasAudio === item.hasAudio)
-    )
-    .sort((a, b) => getQualityScore(b.quality, b) - getQualityScore(a.quality, a));
-
-  // Apply size limit filter
-  if (MAX_FILE_SIZE) {
-    videoDownloads = videoDownloads.filter(
-      (d) => !d.filesize || d.filesize <= MAX_FILE_SIZE
-    );
-  }
-
-  // Limit to top N formats
-  videoDownloads = videoDownloads.slice(0, MAX_FORMATS);
-
-  // Audio-only downloads
-  let audioDownloads = formats
-    .filter((f) => f.url && f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'))
-    .map((f) => {
-      const filesize = f.filesize || f.filesize_approx || null;
-      return {
-        quality: f.abr ? `${Math.round(f.abr)}kbps` : 'Standard',
-        format: f.ext || 'm4a',
+        vcodec: f.vcodec || null,
+        acodec: f.acodec || null,
         abr: f.abr ? Math.round(f.abr) : null,
-        filesize,
-        filesizeFormatted: formatBytes(filesize),
-        formatId: f.format_id || null,
         url: f.url,
+        streamUrl,
+        mergedStreamUrl,
       };
-    })
+    });
+
+  // 1. Muxed Formats (Video + Audio combined)
+  let muxedDownloads = parsedFormats
+    .filter((f) => f.isMuxed)
     .filter((item, idx, self) =>
       idx === self.findIndex((t) => t.quality === item.quality && t.format === item.format)
     )
-    .sort((a, b) => (b.abr || 0) - (a.abr || 0))
-    .slice(0, MAX_FORMATS);
+    .sort((a, b) => getQualityScore(b.quality, b) - getQualityScore(a.quality, a));
 
-  // Fallback: top-level URL when no formats parsed
-  if (videoDownloads.length === 0 && data.url) {
-    videoDownloads.push({
-      quality: data.height ? `${data.height}p` : 'Standard',
-      format: data.ext || 'mp4',
+  // 2. Video-Only Formats (High resolutions without audio, e.g. DASH 1080p, 1440p, 4K)
+  let videoOnlyDownloads = parsedFormats
+    .filter((f) => f.videoOnly)
+    .filter((item, idx, self) =>
+      idx === self.findIndex((t) => t.quality === item.quality && t.format === item.format)
+    )
+    .sort((a, b) => getQualityScore(b.quality, b) - getQualityScore(a.quality, a));
+
+  // 3. Audio-Only Formats
+  let audioDownloads = parsedFormats
+    .filter((f) => f.audioOnly)
+    .filter((item, idx, self) =>
+      idx === self.findIndex((t) => t.quality === item.quality && t.format === item.format)
+    )
+    .sort((a, b) => (b.abr || 0) - (a.abr || 0));
+
+  // Fallback if platform provides top-level URL
+  if (muxedDownloads.length === 0 && videoOnlyDownloads.length === 0 && data.url) {
+    const ext = data.ext || 'mp4';
+    const qualityLabel = data.height ? `${data.height}p` : 'Standard';
+    const streamFilename = `${safeTitle}_${qualityLabel}.${ext}`;
+    muxedDownloads.push({
+      quality: qualityLabel,
+      format: ext,
+      ext,
       filesize: data.filesize || null,
       filesizeFormatted: formatBytes(data.filesize),
       hasAudio: true,
       isMuxed: true,
+      videoOnly: false,
+      audioOnly: false,
       width: data.width || null,
       height: data.height || null,
       fps: data.fps || null,
       formatId: data.format_id || 'direct',
+      vcodec: data.vcodec || null,
+      acodec: data.acodec || null,
+      abr: null,
       url: data.url,
+      streamUrl: `/api/stream?url=${encodeURIComponent(data.url)}&filename=${encodeURIComponent(streamFilename)}`,
+      mergedStreamUrl: null,
     });
   }
 
-  const qualities = [...new Set(videoDownloads.map((d) => d.quality))];
-  const bestQuality = qualities[0] || null;
-  const bestMuxedFormat = videoDownloads.find((d) => d.hasAudio) || null;
-  const bestMuxedQuality = bestMuxedFormat ? bestMuxedFormat.quality : null;
-  const hasMuxedFormats = Boolean(bestMuxedFormat);
+  // ─── AUDIO FALLBACK for platforms with only muxed streams (Instagram, TikTok, Twitter, Douyin) ───
+  // If no standalone audio streams exist, synthesize audio options from the best muxed stream
+  if (audioDownloads.length === 0) {
+    const bestSource = muxedDownloads[0] || (data.url ? { url: data.url, filesize: data.filesize } : null);
+    if (bestSource) {
+      audioDownloads.push({
+        quality: 'Audio (MP3)',
+        format: 'mp3',
+        ext: 'mp3',
+        abr: 128,
+        filesize: null,
+        filesizeFormatted: null,
+        formatId: 'audio-mp3',
+        isDerivedFromVideo: true,
+        url: bestSource.url,
+        streamUrl: `/api/stream?url=${encodeURIComponent(url)}&type=audio&filename=${encodeURIComponent(`${safeTitle}.mp3`)}`,
+      });
+      audioDownloads.push({
+        quality: 'Audio (M4A)',
+        format: 'm4a',
+        ext: 'm4a',
+        abr: 128,
+        filesize: null,
+        filesizeFormatted: null,
+        formatId: 'audio-m4a',
+        isDerivedFromVideo: true,
+        url: bestSource.url,
+        streamUrl: `/api/stream?url=${encodeURIComponent(url)}&type=audio&format=m4a&filename=${encodeURIComponent(`${safeTitle}.m4a`)}`,
+      });
+    }
+  }
+
+  // Apply MAX_FILE_SIZE limit
+  if (MAX_FILE_SIZE) {
+    muxedDownloads = muxedDownloads.filter((d) => !d.filesize || d.filesize <= MAX_FILE_SIZE);
+    videoOnlyDownloads = videoOnlyDownloads.filter((d) => !d.filesize || d.filesize <= MAX_FILE_SIZE);
+  }
+
+  // Best items identification
+  const bestVideoWithAudio = muxedDownloads[0] || null;
+  const bestAudio = audioDownloads[0] || null;
+  const bestVideoOnly = videoOnlyDownloads[0] || null;
+  const hasMuxedFormats = Boolean(bestVideoWithAudio);
+  const bestMuxedQuality = bestVideoWithAudio ? bestVideoWithAudio.quality : null;
+
+  // Convenient on-the-fly streaming download URLs
+  const mergedDownloadUrl = `/api/stream?url=${encodeURIComponent(url)}&merge=true&quality=best&filename=${encodeURIComponent(`${safeTitle}.mp4`)}`;
+  const audioDownloadUrl = `/api/stream?url=${encodeURIComponent(url)}&type=audio&filename=${encodeURIComponent(`${safeTitle}.mp3`)}`;
+
+  // Construct primary `downloads` array
+  // Crucial design: We ensure muxed formats are always present and not crowded out by video-only formats!
+  let combinedDownloads = [];
+
+  const requestedAudioOnly = filter === 'audio' || type === 'audio';
+  const requestedMuxedOnly = filter === 'muxed' || hasAudio === true || hasAudio === 'true';
+
+  if (requestedAudioOnly) {
+    combinedDownloads = audioDownloads.slice(0, MAX_FORMATS);
+  } else if (requestedMuxedOnly) {
+    if (muxedDownloads.length > 0) {
+      combinedDownloads = muxedDownloads.slice(0, MAX_FORMATS);
+    } else {
+      // If no direct muxed formats exist, provide the on-the-fly merged stream as the primary option
+      combinedDownloads = [
+        {
+          quality: 'Best (Audio+Video Merged)',
+          format: 'mp4',
+          ext: 'mp4',
+          filesize: null,
+          filesizeFormatted: null,
+          hasAudio: true,
+          isMuxed: true,
+          videoOnly: false,
+          audioOnly: false,
+          url: mergedDownloadUrl,
+          streamUrl: mergedDownloadUrl,
+          mergedStreamUrl: mergedDownloadUrl,
+          isSyntheticMerged: true,
+        },
+      ];
+    }
+  } else {
+    // Default mode:
+    // 1. Keep one best format per resolution in videoOnlyDownloads (skipping qualities already present in muxed)
+    const seenQualities = new Set(muxedDownloads.map((m) => m.quality));
+    const cleanVideoOnly = [];
+    for (const v of videoOnlyDownloads) {
+      if (!seenQualities.has(v.quality)) {
+        seenQualities.add(v.quality);
+        cleanVideoOnly.push(v);
+      }
+    }
+
+    // 2. Guarantee that muxed formats with audio are NEVER pushed out by silent formats
+    const remainingSlots = Math.max(MAX_FORMATS - muxedDownloads.length, 3);
+    const topVideoOnly = cleanVideoOnly.slice(0, remainingSlots);
+
+    // Combine and sort by quality
+    combinedDownloads = [...muxedDownloads, ...topVideoOnly].sort(
+      (a, b) => getQualityScore(b.quality, b) - getQualityScore(a.quality, a)
+    );
+  }
+
+  const allVideoDownloads = [...muxedDownloads, ...videoOnlyDownloads].sort(
+    (a, b) => getQualityScore(b.quality, b) - getQualityScore(a.quality, a)
+  );
+
+  const qualities = [...new Set(allVideoDownloads.map((d) => d.quality))];
+  const bestQuality = qualities[0] || (bestVideoWithAudio ? bestVideoWithAudio.quality : null);
+  const bestVideo = allVideoDownloads[0] || null;
 
   const result = {
     ...baseMeta,
     bestQuality,
     bestMuxedQuality,
-    bestMuxed: bestMuxedFormat,
+    bestVideoWithAudio,
+    bestMuxed: bestVideoWithAudio, // backward-compatibility alias
     hasMuxedFormats,
+    bestAudio,
+    bestVideo,
+    mergedDownloadUrl,
+    audioDownloadUrl,
     qualities,
-    downloads: videoDownloads,
-    audioDownloads,
+    downloads: combinedDownloads,
+    muxedDownloads: muxedDownloads.slice(0, MAX_FORMATS),
+    videoOnlyDownloads: videoOnlyDownloads.slice(0, MAX_FORMATS),
+    audioDownloads: audioDownloads.slice(0, MAX_FORMATS),
     subtitles: subtitles.slice(0, 15),
     chapters,
   };
 
   log('info', 'Extraction complete', {
-    platform: platformName, title: result.title,
-    videoFormats: videoDownloads.length, audioFormats: audioDownloads.length,
+    platform: platformName,
+    title: result.title,
+    muxedCount: muxedDownloads.length,
+    videoOnlyCount: videoOnlyDownloads.length,
+    audioCount: audioDownloads.length,
+    hasMuxed: hasMuxedFormats,
   });
 
   return result;
-}
-
-function formatDuration(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 extractVideo.classifyError = classifyError;
