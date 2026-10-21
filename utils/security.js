@@ -92,20 +92,23 @@ async function validateSafeUrl(inputUrl) {
   }
 
   const hostname = parsed.hostname.toLowerCase();
+  const cleanHostname = (hostname.startsWith('[') && hostname.endsWith(']'))
+    ? hostname.slice(1, -1)
+    : hostname;
 
   // Block localhost and standard loopback hostnames
   if (
-    hostname === 'localhost' ||
-    hostname.endsWith('.localhost') ||
-    hostname.endsWith('.local') ||
-    hostname.endsWith('.internal')
+    cleanHostname === 'localhost' ||
+    cleanHostname.endsWith('.localhost') ||
+    cleanHostname.endsWith('.local') ||
+    cleanHostname.endsWith('.internal')
   ) {
     return { ok: false, error: 'Access to local or internal hosts is forbidden.' };
   }
 
   // Direct IP in hostname
-  if (net.isIP(hostname)) {
-    if (isPrivateIp(hostname)) {
+  if (net.isIP(cleanHostname)) {
+    if (isPrivateIp(cleanHostname)) {
       return { ok: false, error: 'Access to private or reserved IP addresses is forbidden.' };
     }
     return { ok: true, parsedUrl: parsed };

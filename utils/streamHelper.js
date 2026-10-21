@@ -125,6 +125,19 @@ function proxyMediaStream(mediaUrl, req, res, options = {}) {
           return executeRequest(nextUrl);
         }
 
+        // Handle upstream errors (e.g. 403 Forbidden, 404 Not Found, 410 Gone)
+        if (streamRes.statusCode >= 400) {
+          if (!res.headersSent) {
+            res.status(streamRes.statusCode).json({
+              success: false,
+              errorCode: 'UPSTREAM_ERROR',
+              error: `Media host returned HTTP ${streamRes.statusCode}. The media link may be expired or inaccessible.`,
+            });
+          }
+          streamRes.resume();
+          return;
+        }
+
         // Set status code (200 OK or 206 Partial Content)
         res.status(streamRes.statusCode);
 
@@ -207,9 +220,26 @@ function streamMergedMedia(pageUrl, res, options = {}) {
     '-o', '-',
   ];
 
+  if (process.env.YTDLP_USER_AGENT) {
+    args.push('--user-agent', process.env.YTDLP_USER_AGENT);
+  }
+
   if (process.env.YTDLP_PROXY) {
     args.push('--proxy', process.env.YTDLP_PROXY);
   }
+
+  // Inject cookies if available for authenticated/age-gated streams
+  try {
+    const extractVideo = require('./extractVideo');
+    if (typeof extractVideo.resolveCookiesFile === 'function') {
+      const cookiesFile = extractVideo.resolveCookiesFile();
+      if (cookiesFile) {
+        args.push('--cookies', cookiesFile);
+      } else if (process.env.YTDLP_COOKIES_FROM_BROWSER) {
+        args.push('--cookies-from-browser', process.env.YTDLP_COOKIES_FROM_BROWSER);
+      }
+    }
+  } catch {}
 
   args.push(pageUrl);
 
@@ -232,6 +262,12 @@ function streamMergedMedia(pageUrl, res, options = {}) {
   child.on('error', (err) => {
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: 'Failed to start stream merger: ' + err.message });
+    }
+  });
+
+  child.on('close', (code) => {
+    if (code !== 0 && !res.headersSent) {
+      res.status(502).json({ success: false, errorCode: 'STREAM_FAILED', error: `Stream merger process exited with code ${code}.` });
     }
   });
 
@@ -262,9 +298,26 @@ function streamAudioMedia(pageUrl, res, options = {}) {
     '-o', '-',
   ];
 
+  if (process.env.YTDLP_USER_AGENT) {
+    args.push('--user-agent', process.env.YTDLP_USER_AGENT);
+  }
+
   if (process.env.YTDLP_PROXY) {
     args.push('--proxy', process.env.YTDLP_PROXY);
   }
+
+  // Inject cookies if available
+  try {
+    const extractVideo = require('./extractVideo');
+    if (typeof extractVideo.resolveCookiesFile === 'function') {
+      const cookiesFile = extractVideo.resolveCookiesFile();
+      if (cookiesFile) {
+        args.push('--cookies', cookiesFile);
+      } else if (process.env.YTDLP_COOKIES_FROM_BROWSER) {
+        args.push('--cookies-from-browser', process.env.YTDLP_COOKIES_FROM_BROWSER);
+      }
+    }
+  } catch {}
 
   args.push(pageUrl);
 
@@ -280,6 +333,12 @@ function streamAudioMedia(pageUrl, res, options = {}) {
   child.on('error', (err) => {
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: 'Failed to extract audio stream: ' + err.message });
+    }
+  });
+
+  child.on('close', (code) => {
+    if (code !== 0 && !res.headersSent) {
+      res.status(502).json({ success: false, errorCode: 'STREAM_FAILED', error: `Audio stream process exited with code ${code}.` });
     }
   });
 
@@ -328,6 +387,12 @@ function streamDirectFfmpegMerge(videoUrl, audioUrl, res, options = {}) {
   child.on('error', (err) => {
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: 'FFmpeg merging failed: ' + err.message });
+    }
+  });
+
+  child.on('close', (code) => {
+    if (code !== 0 && !res.headersSent) {
+      res.status(502).json({ success: false, errorCode: 'MERGE_FAILED', error: `FFmpeg process exited with code ${code}.` });
     }
   });
 

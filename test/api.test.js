@@ -54,6 +54,10 @@ describe('Security & SSRF Guard', () => {
     // DNS-resolved private / loopback domains
     const r7 = await validateSafeUrl('http://127.0.0.1.nip.io/secret');
     assert.equal(r7.ok, false);
+
+    // Bracketed IPv6 loopback
+    const r8 = await validateSafeUrl('http://[::1]:3000/api/health');
+    assert.equal(r8.ok, false);
   });
 });
 
@@ -244,6 +248,11 @@ describe('HTTP API Endpoints Integration', () => {
     const postData = await postRes.json();
     assert.equal(postData.success, true);
     assert.equal(postData.platform, 'tiktok');
+
+    const checkSsrfRes = await fetch(`${baseUrl}/api/check?url=http://127.0.0.1:3000`);
+    assert.equal(checkSsrfRes.status, 400);
+    const checkSsrfData = await checkSsrfRes.json();
+    assert.equal(checkSsrfData.errorCode, 'INVALID_URL');
   });
 
   test('POST /api/batch validates input properly', async () => {

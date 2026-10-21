@@ -124,11 +124,10 @@ app.use(['/api', '/download', '/audio', '/info', '/batch', '/stream', '/check', 
     });
   }
 
-  // Constant-time comparison to prevent timing attacks
-  if (
-    provided.length !== API_SECRET_KEY.length ||
-    !crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(API_SECRET_KEY))
-  ) {
+  // Constant-time comparison using fixed-length SHA-256 digests (prevents timing and length leakage)
+  const providedHash = crypto.createHash('sha256').update(String(provided)).digest();
+  const secretHash = crypto.createHash('sha256').update(API_SECRET_KEY).digest();
+  if (!crypto.timingSafeEqual(providedHash, secretHash)) {
     return res.status(403).json({
       success: false,
       errorCode: 'API_KEY_INVALID',

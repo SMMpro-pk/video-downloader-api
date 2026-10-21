@@ -302,9 +302,7 @@ async function handleStream(req, res) {
 
   // Case 2: Pure audio streaming requested
   if (type === 'audio' || format === 'mp3' || format === 'm4a') {
-    if (isPageUrl) {
-      return streamAudioMedia(mediaUrl, res, { format: format || 'mp3', filename });
-    }
+    return streamAudioMedia(mediaUrl, res, { format: format || 'mp3', filename });
   }
 
   // Case 3: Live merging requested or target is a platform page URL
@@ -325,6 +323,15 @@ router.post('/stream', handleStream);
 async function handleCheck(req, res) {
   const url = getUrlFromRequest(req);
   if (!url) return res.status(400).json({ success: false, error: 'Missing video URL.' });
+
+  const safeCheck = await validateSafeUrl(url);
+  if (!safeCheck.ok) {
+    return res.status(400).json({
+      success: false,
+      errorCode: 'INVALID_URL',
+      error: safeCheck.error || 'Invalid or forbidden URL.',
+    });
+  }
 
   try {
     const { originalUrl, resolvedUrl, wasRedirected } = await normalizeUrl(url);

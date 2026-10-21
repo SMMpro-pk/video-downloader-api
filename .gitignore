@@ -9,6 +9,8 @@ node_modules/
 *.key
 *.cert
 *.crt
+*cookies*.txt
+cookies.txt
 
 # Logs
 logs/

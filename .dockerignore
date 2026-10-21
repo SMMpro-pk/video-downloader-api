@@ -4,6 +4,12 @@ logs
 .gitignore
 .env
 .env.*
+*.pem
+*.key
+*.cert
+*.crt
+*cookies*.txt
+cookies.txt
 .dockerignore
 .vercel
 test
@@ -11,3 +17,4 @@ test
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
